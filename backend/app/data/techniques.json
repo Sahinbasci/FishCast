@@ -1,0 +1,51 @@
+[
+  {
+    "id": "capari",
+    "name": "Çapari",
+    "description": "60-200g sinker ile dip çapari takımı",
+    "targetSpecies": ["istavrit", "palamut"],
+    "tips": "Ağır sinker (150g+) derinlik için"
+  },
+  {
+    "id": "kursun_arkasi",
+    "name": "Kurşun Arkası",
+    "description": "Sinker + misina + tek iğne, doğal yem",
+    "targetSpecies": ["cinekop", "sarikanat"],
+    "tips": "Taze istavrit fileto en etkili yem"
+  },
+  {
+    "id": "spin",
+    "name": "Spin",
+    "description": "Yapay yem (rapala, kaşık, jig) ile aktif avlanma",
+    "targetSpecies": ["lufer", "palamut", "levrek"],
+    "tips": "Sabah erken WTD surface lure dene"
+  },
+  {
+    "id": "lrf",
+    "name": "LRF",
+    "description": "Light Rock Fishing, hafif takım, küçük silikon yemler",
+    "targetSpecies": ["istavrit", "karagoz", "mirmir"],
+    "tips": "Gece kayalıklarda kokulu silikon"
+  },
+  {
+    "id": "surf",
+    "name": "Surf",
+    "description": "Uzun mesafe atış, kıyıdan 50-100m",
+    "targetSpecies": ["levrek", "karagoz"],
+    "tips": "Kumlu tabanda etkili"
+  },
+  {
+    "id": "yemli_dip",
+    "name": "Yemli Dip",
+    "description": "Doğal yem ile dip avlanma, bekleme tekniği",
+    "targetSpecies": ["istavrit", "cinekop", "karagoz"],
+    "tips": "Sabırlı ol, çinekop yavaş yer"
+  },
+  {
+    "id": "shore_jig",
+    "name": "Shore Jig",
+    "description": "Kıyıdan metal jig atma, dikey jigging",
+    "targetSpecies": ["lufer", "palamut", "levrek"],
+    "tips": "40-60g jig, hızlı retrieve"
+  }
+]

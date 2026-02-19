@@ -1,0 +1,192 @@
+[
+  {
+    "id": "istavrit",
+    "name": "İstavrit",
+    "tier": 1,
+    "season": {
+      "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      "peak": [9, 10, 11]
+    },
+    "idealTemp": { "min": 10.0, "max": 22.0 },
+    "size": "10-25cm",
+    "legalMinSize": null,
+    "primaryTechniques": [
+      { "id": "capari", "name": "Çapari", "rating": 3 },
+      { "id": "lrf", "name": "LRF", "rating": 3 },
+      { "id": "yemli_dip", "name": "Yemli Dip", "rating": 2 }
+    ],
+    "bestBaits": [
+      { "id": "karides", "name": "Karides" },
+      { "id": "midye", "name": "Midye" }
+    ],
+    "tips": "Sürü halinde gezer, çapari ile etkili"
+  },
+  {
+    "id": "cinekop",
+    "name": "Çinekop",
+    "tier": 1,
+    "season": {
+      "months": [9, 10, 11, 12],
+      "peak": [10, 11]
+    },
+    "idealTemp": { "min": 12.0, "max": 20.0 },
+    "size": "13-17cm",
+    "legalMinSize": "13cm",
+    "primaryTechniques": [
+      { "id": "kursun_arkasi", "name": "Kurşun Arkası", "rating": 3 },
+      { "id": "yemli_dip", "name": "Yemli Dip", "rating": 3 },
+      { "id": "capari", "name": "Çapari", "rating": 2 }
+    ],
+    "bestBaits": [
+      { "id": "istavrit_fileto", "name": "İstavrit Fileto" },
+      { "id": "krace_fileto", "name": "Kraçe Fileto" }
+    ],
+    "tips": "Soğuk suda lure'e vurmaz, taze yeme geç"
+  },
+  {
+    "id": "sarikanat",
+    "name": "Sarıkanat",
+    "tier": 1,
+    "season": {
+      "months": [9, 10, 11, 12],
+      "peak": [10, 11]
+    },
+    "idealTemp": { "min": 12.0, "max": 20.0 },
+    "size": "18-21cm",
+    "legalMinSize": "18cm",
+    "primaryTechniques": [
+      { "id": "kursun_arkasi", "name": "Kurşun Arkası", "rating": 3 },
+      { "id": "yemli_dip", "name": "Yemli Dip", "rating": 3 },
+      { "id": "spin", "name": "Spin", "rating": 2 }
+    ],
+    "bestBaits": [
+      { "id": "istavrit_fileto", "name": "İstavrit Fileto" },
+      { "id": "hamsi_fileto", "name": "Hamsi Fileto" }
+    ],
+    "tips": "Çinekopla aynı sürüde, biraz daha büyük"
+  },
+  {
+    "id": "palamut",
+    "name": "Palamut",
+    "tier": 1,
+    "season": {
+      "months": [8, 9, 10, 11],
+      "peak": [9, 10]
+    },
+    "idealTemp": { "min": 14.0, "max": 22.0 },
+    "size": "25-50cm",
+    "legalMinSize": "25cm",
+    "primaryTechniques": [
+      { "id": "capari", "name": "Çapari", "rating": 3 },
+      { "id": "spin", "name": "Spin", "rating": 3 },
+      { "id": "shore_jig", "name": "Shore Jig", "rating": 2 }
+    ],
+    "bestBaits": [],
+    "tips": "Hızlı yüzer, çapari ile sürüyü bul"
+  },
+  {
+    "id": "karagoz",
+    "name": "Karagöz",
+    "tier": 1,
+    "season": {
+      "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      "peak": [4, 5, 10, 11]
+    },
+    "idealTemp": { "min": 10.0, "max": 26.0 },
+    "size": "15-30cm",
+    "legalMinSize": "18cm",
+    "primaryTechniques": [
+      { "id": "lrf", "name": "LRF", "rating": 3 },
+      { "id": "yemli_dip", "name": "Yemli Dip", "rating": 3 },
+      { "id": "surf", "name": "Surf", "rating": 2 }
+    ],
+    "bestBaits": [
+      { "id": "midye", "name": "Midye" },
+      { "id": "deniz_kurdu", "name": "Deniz Kurdu" },
+      { "id": "boru_kurdu", "name": "Boru Kurdu" }
+    ],
+    "tips": "Spin ile TUTULMAZ. Gece kayalıklarda aktif."
+  },
+  {
+    "id": "lufer",
+    "name": "Lüfer",
+    "tier": 2,
+    "season": {
+      "months": [9, 10, 11, 12],
+      "peak": [10, 11]
+    },
+    "idealTemp": { "min": 12.0, "max": 22.0 },
+    "size": "25-50cm",
+    "legalMinSize": "25cm",
+    "primaryTechniques": [
+      { "id": "spin", "name": "Spin", "rating": 3 },
+      { "id": "shore_jig", "name": "Shore Jig", "rating": 3 }
+    ],
+    "bestBaits": [],
+    "tips": "Sabah erken yüzeyde avlanır, WTD etkili"
+  },
+  {
+    "id": "levrek",
+    "name": "Levrek",
+    "tier": 2,
+    "season": {
+      "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      "peak": [10, 11, 12, 1, 2]
+    },
+    "idealTemp": { "min": 8.0, "max": 24.0 },
+    "size": "25-70cm",
+    "legalMinSize": "25cm",
+    "primaryTechniques": [
+      { "id": "shore_jig", "name": "Shore Jig", "rating": 3 },
+      { "id": "lrf", "name": "LRF", "rating": 2 },
+      { "id": "yemli_dip", "name": "Yemli Dip", "rating": 2 }
+    ],
+    "bestBaits": [
+      { "id": "istavrit_fileto", "name": "İstavrit Fileto" },
+      { "id": "karides", "name": "Karides" }
+    ],
+    "tips": "Gece kayalıklarda aktif, aydınlatma altında avlanır"
+  },
+  {
+    "id": "kolyoz",
+    "name": "Kolyoz",
+    "tier": 2,
+    "season": {
+      "months": [5, 6, 7, 8, 9, 10],
+      "peak": [7, 8, 9]
+    },
+    "idealTemp": { "min": 14.0, "max": 24.0 },
+    "size": "15-25cm",
+    "legalMinSize": null,
+    "primaryTechniques": [
+      { "id": "capari", "name": "Çapari", "rating": 3 },
+      { "id": "yemli_dip", "name": "Yemli Dip", "rating": 2 }
+    ],
+    "bestBaits": [
+      { "id": "karides", "name": "Karides" },
+      { "id": "midye", "name": "Midye" }
+    ],
+    "tips": "Sürü halinde, çapari ile etkili"
+  },
+  {
+    "id": "mirmir",
+    "name": "Mırmır",
+    "tier": 2,
+    "season": {
+      "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      "peak": [5, 6, 9, 10]
+    },
+    "idealTemp": { "min": 10.0, "max": 26.0 },
+    "size": "10-20cm",
+    "legalMinSize": null,
+    "primaryTechniques": [
+      { "id": "lrf", "name": "LRF", "rating": 3 },
+      { "id": "yemli_dip", "name": "Yemli Dip", "rating": 2 }
+    ],
+    "bestBaits": [
+      { "id": "midye", "name": "Midye" },
+      { "id": "deniz_kurdu", "name": "Deniz Kurdu" }
+    ],
+    "tips": "Küçük ama güçlü, LRF ile keyifli av"
+  }
+]
