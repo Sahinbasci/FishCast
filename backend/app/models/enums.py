@@ -93,9 +93,14 @@ class DataSourceStatus(str, Enum):
 
 
 class SeasonStatus(str, Enum):
-    """Sezon durumu."""
+    """Sezon durumu.
+
+    off = off-season (catchable via parça), closed = legacy (retained for backward compat).
+    """
     peak = "peak"
+    shoulder = "shoulder"
     active = "active"
+    off = "off"
     closed = "closed"
 
 

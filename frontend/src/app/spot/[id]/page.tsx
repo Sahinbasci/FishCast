@@ -29,8 +29,10 @@ export default function SpotPage() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="text-4xl mb-4 animate-pulse">&#x1F3A3;</div>
-          <p className="text-gray-500">Yükleniyor...</p>
+          <div className="w-12 h-12 mx-auto mb-3 rounded-[var(--radius-lg)] flex items-center justify-center" style={{ background: "var(--gradient-ocean)" }}>
+            <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+          </div>
+          <p className="text-[var(--text-muted)] text-sm">Yükleniyor...</p>
         </div>
       </div>
     );
@@ -40,10 +42,12 @@ export default function SpotPage() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="text-4xl mb-4">&#x274C;</div>
-          <p className="text-gray-500">{error || "Mera bulunamadı"}</p>
-          <a href="/" className="text-blue-600 hover:underline text-sm mt-2 inline-block">
-            Ana sayfaya dön
+          <div className="w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center" style={{ background: "var(--gradient-sunset)" }}>
+            <span className="text-xl">&#x274C;</span>
+          </div>
+          <p className="text-[var(--text-secondary)] mb-2">{error || "Mera bulunamadı"}</p>
+          <a href="/" className="text-[var(--blue-light)] hover:text-[var(--blue-bright)] text-sm font-semibold inline-block transition-colors">
+            Ana sayfaya dön &rarr;
           </a>
         </div>
       </div>
@@ -52,8 +56,9 @@ export default function SpotPage() {
 
   return (
     <div className="space-y-6">
-      <a href="/" className="text-sm text-blue-600 hover:underline">
-        &larr; Ana Sayfa
+      <a href="/" className="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--blue-light)] transition-colors">
+        <span>&larr;</span>
+        <span>Ana Sayfa</span>
       </a>
       <SpotDetail spot={spot} />
       <ReportForm spotId={spot.id} spotName={spot.name} />

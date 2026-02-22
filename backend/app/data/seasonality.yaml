@@ -1,0 +1,151 @@
+# FishCast Seasonality Configuration
+# Contract Version: 1.3 | 2026-02-22
+#
+# Soft season curve — NEVER hard-zeros a species.
+# These are PRIORS (approximate), not absolute gates.
+# peakMultiplier / shoulderMultiplier / offMultiplier are ADDITIVE adjustments
+# applied to the base weighted score, replacing the old multiplicative season_multiplier.
+#
+# Formula change (v1.3):
+#   OLD: score = weighted_sum * 100 * season_multiplier + rule_bonus
+#   NEW: score = weighted_sum * 100 + season_adjustment + rule_bonus
+#     where season_adjustment comes from this config.
+#
+# peakAdjustment: bonus points added during peak months (e.g., +12)
+# shoulderAdjustment: small bonus during shoulder months (e.g., +5)
+# offAdjustment: penalty during off-season (e.g., -25) — NEVER zeros the score
+# offFloor: minimum possible score contribution from season (ensures "parça ihtimali")
+# confidenceImpact: how much off-season reduces confidence (0.0-0.5)
+#
+# parcaBehavior: when conditions are strongly favorable AND species is off-season,
+#   reduce the penalty. This encodes "parça ihtimali" (stray fish possibility).
+#   parcaConditionThreshold: minimum weighted_sum (0-1) to trigger parça reduction
+#   parcaPenaltyReduction: how much to reduce the offAdjustment (0-1, e.g., 0.5 = halve it)
+#   parcaConfidence: confidence floor during parça (0-1)
+
+species:
+  istavrit:
+    peakMonths: [9, 10, 11]
+    shoulderMonths: [7, 8, 12]
+    offMonths: []  # year-round species, no off-season
+    peakAdjustment: 10
+    shoulderAdjustment: 3
+    offAdjustment: 0
+    offFloor: 15
+    confidenceImpact: 0.0
+    parcaBehavior:
+      parcaConditionThreshold: 0.55
+      parcaPenaltyReduction: 0.5
+      parcaConfidence: 0.4
+
+  cinekop:
+    peakMonths: [11, 12, 1]
+    shoulderMonths: [10, 2]
+    offMonths: [3, 4, 5, 6, 7, 8, 9]
+    peakAdjustment: 12
+    shoulderAdjustment: 5
+    offAdjustment: -25
+    offFloor: 12
+    confidenceImpact: 0.3
+    parcaBehavior:
+      parcaConditionThreshold: 0.6
+      parcaPenaltyReduction: 0.5
+      parcaConfidence: 0.35
+
+  sarikanat:
+    peakMonths: [11, 12, 1]
+    shoulderMonths: [10, 2]
+    offMonths: [3, 4, 5, 6, 7, 8, 9]
+    peakAdjustment: 12
+    shoulderAdjustment: 5
+    offAdjustment: -25
+    offFloor: 12
+    confidenceImpact: 0.3
+    parcaBehavior:
+      parcaConditionThreshold: 0.6
+      parcaPenaltyReduction: 0.5
+      parcaConfidence: 0.35
+
+  palamut:
+    peakMonths: [9, 10]
+    shoulderMonths: [7, 8, 11]
+    offMonths: [12, 1, 2, 3, 4, 5, 6]
+    peakAdjustment: 15
+    shoulderAdjustment: 5
+    offAdjustment: -22
+    offFloor: 14
+    confidenceImpact: 0.25
+    parcaBehavior:
+      parcaConditionThreshold: 0.55
+      parcaPenaltyReduction: 0.6
+      parcaConfidence: 0.35
+
+  karagoz:
+    peakMonths: [4, 5, 10, 11]
+    shoulderMonths: [3, 6, 9, 12]
+    offMonths: []  # year-round
+    peakAdjustment: 10
+    shoulderAdjustment: 3
+    offAdjustment: 0
+    offFloor: 15
+    confidenceImpact: 0.0
+    parcaBehavior:
+      parcaConditionThreshold: 0.55
+      parcaPenaltyReduction: 0.5
+      parcaConfidence: 0.4
+
+  lufer:
+    peakMonths: [10, 11]
+    shoulderMonths: [9, 12]
+    offMonths: [1, 2, 3, 4, 5, 6, 7, 8]
+    peakAdjustment: 15
+    shoulderAdjustment: 5
+    offAdjustment: -28
+    offFloor: 10
+    confidenceImpact: 0.35
+    parcaBehavior:
+      parcaConditionThreshold: 0.65
+      parcaPenaltyReduction: 0.4
+      parcaConfidence: 0.3
+
+  levrek:
+    peakMonths: [10, 11, 12, 1, 2]
+    shoulderMonths: [3, 9]
+    offMonths: []  # year-round (but peaks in cold)
+    peakAdjustment: 10
+    shoulderAdjustment: 3
+    offAdjustment: -5
+    offFloor: 15
+    confidenceImpact: 0.05
+    parcaBehavior:
+      parcaConditionThreshold: 0.5
+      parcaPenaltyReduction: 0.5
+      parcaConfidence: 0.4
+
+  kolyoz:
+    peakMonths: [7, 8, 9]
+    shoulderMonths: [5, 6, 10]
+    offMonths: [11, 12, 1, 2, 3, 4]
+    peakAdjustment: 10
+    shoulderAdjustment: 5
+    offAdjustment: -25
+    offFloor: 10
+    confidenceImpact: 0.3
+    parcaBehavior:
+      parcaConditionThreshold: 0.6
+      parcaPenaltyReduction: 0.4
+      parcaConfidence: 0.3
+
+  mirmir:
+    peakMonths: [5, 6, 9, 10]
+    shoulderMonths: [4, 7, 8, 11]
+    offMonths: []  # year-round
+    peakAdjustment: 8
+    shoulderAdjustment: 3
+    offAdjustment: -3
+    offFloor: 15
+    confidenceImpact: 0.05
+    parcaBehavior:
+      parcaConditionThreshold: 0.5
+      parcaPenaltyReduction: 0.5
+      parcaConfidence: 0.4

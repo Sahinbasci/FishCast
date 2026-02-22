@@ -1,19 +1,14 @@
-"""FishCast rule engine.
+"""FishCast rule engine — v1.3 hardened.
 
 rules.yaml'ı yükler, startup'ta JSON Schema ile validate eder,
-24 kuralı evaluate eder, conflict resolution uygular.
+kuralları evaluate eder, category-based caps ile conflict resolution uygular.
 
-Operators: >=, <, range, time (midnight wrap), months, string, list OR,
-           regionId, bool, pelagicCorridor, features_include, species_in_context.
-
-Conflict Resolution (SCORING_ENGINE.md):
-    1. All matching rules fire (no short-circuit)
-    2. scoreBonus: summed per species, capped at +30
-    3. techniqueHints: merged, deduped, priority-ordered
-    4. removeFromTechniques: applied after merge
-    5. modeHint: highest priority wins, same priority → alphabetical
-    6. messageTR: concatenated " | ", priority DESC
-    7. noGo: any true → NO-GO
+v1.3 additions:
+- Explicit category field per rule (absolute, windCoast, weatherMode, istanbul, techniqueTime)
+- Per-category bonus caps from scoring_config["ruleBonusCaps"]
+- Category cap trace in RuleResult
+- isDaylight, waterMassProxy, shelteredFrom in context
+- mirmir promoted to Tier 1
 """
 
 from __future__ import annotations
@@ -31,12 +26,30 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
-# Tier 1 species for wildcard expansion
-TIER1_SPECIES = ["istavrit", "cinekop", "sarikanat", "palamut", "karagoz"]
+# Tier 1 species for wildcard expansion (v1.3: mirmir promoted)
+TIER1_SPECIES = [
+    "istavrit", "cinekop", "sarikanat", "palamut", "karagoz", "mirmir",
+]
 ALL_SPECIES = [
     "istavrit", "cinekop", "sarikanat", "palamut", "karagoz",
     "lufer", "levrek", "kolyoz", "mirmir",
 ]
+
+# Category inference from priority (fallback when rule has no explicit category)
+_PRIORITY_TO_CATEGORY: dict[int, str] = {
+    10: "absolute",
+    9: "windCoast",
+    8: "weatherMode",
+    7: "weatherMode",
+    6: "istanbul",
+    5: "techniqueTime",
+    4: "techniqueTime",
+}
+
+
+def _infer_category(priority: int) -> str:
+    """Infer rule category from priority (backward compat)."""
+    return _PRIORITY_TO_CATEGORY.get(priority, "techniqueTime")
 
 
 def load_and_validate_rules() -> list[dict[str, Any]]:
@@ -84,15 +97,7 @@ def load_and_validate_rules() -> list[dict[str, Any]]:
 # --- Condition Evaluation ---
 
 def _eval_comparison(actual: Any, condition_val: str) -> bool:
-    """>=, <, <=, > operatörlerini evaluate eder.
-
-    Args:
-        actual: Gerçek değer.
-        condition_val: ">=-35" gibi string.
-
-    Returns:
-        Koşul sağlanıyor mu.
-    """
+    """>=, <, <=, > operatörlerini evaluate eder."""
     if actual is None:
         return False
 
@@ -111,16 +116,7 @@ def _eval_comparison(actual: Any, condition_val: str) -> bool:
 
 
 def _eval_time(current_hour: int, current_minute: int, time_range: str) -> bool:
-    """Zaman aralığı kontrolü (midnight wrapping destekli).
-
-    Args:
-        current_hour: Mevcut saat.
-        current_minute: Mevcut dakika.
-        time_range: "HH:MM-HH:MM" formatında.
-
-    Returns:
-        Zaman aralığında mı.
-    """
+    """Zaman aralığı kontrolü (midnight wrapping destekli)."""
     try:
         parts = time_range.split("-")
         start_parts = parts[0].strip().split(":")
@@ -131,22 +127,13 @@ def _eval_time(current_hour: int, current_minute: int, time_range: str) -> bool:
 
         if start_min <= end_min:
             return start_min <= current_min <= end_min
-        # Wraps midnight
         return current_min >= start_min or current_min <= end_min
     except (ValueError, IndexError):
         return False
 
 
 def _eval_range(actual: Any, range_val: list) -> bool:
-    """[min, max] aralık kontrolü.
-
-    Args:
-        actual: Gerçek değer.
-        range_val: [min, max] listesi.
-
-    Returns:
-        Aralıkta mı.
-    """
+    """[min, max] aralık kontrolü."""
     if actual is None or len(range_val) != 2:
         return False
     try:
@@ -162,18 +149,9 @@ def evaluate_condition(
     """Tek bir kural condition'ını evaluate eder.
 
     Tüm field'lar AND ile birleştirilir. Liste değerler OR ile.
-
-    Args:
-        condition: Kural condition dict'i.
-        context: Evaluation context (weather, spot, time, etc.).
-
-    Returns:
-        Tüm condition'lar sağlanıyor mu.
     """
     for field, expected in condition.items():
         actual = context.get(field)
-
-        # --- Özel handler'lar ---
 
         # time: "HH:MM-HH:MM"
         if field == "time":
@@ -214,7 +192,7 @@ def evaluate_condition(
             continue
 
         # Bool fields
-        if field in ("pelagicCorridor", "after_rain"):
+        if field in ("pelagicCorridor", "after_rain", "isDaylight"):
             if actual is None:
                 return False
             if bool(actual) != bool(expected):
@@ -245,22 +223,17 @@ def build_rule_context(
     spot: Any,
     solunar_data: dict[str, Any],
     now: Optional[datetime] = None,
+    daylight_data: Optional[dict[str, Any]] = None,
+    water_mass_proxy: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Rule evaluation için context dict oluşturur.
 
-    Args:
-        weather: WeatherData objesi.
-        spot: SpotOut objesi.
-        solunar_data: Solunar verisi.
-        now: Mevcut zaman. None ise datetime.now().
-
-    Returns:
-        Evaluation context dict'i.
+    v1.3: isDaylight, waterMassProxy, shelteredFrom added.
     """
     if now is None:
         now = datetime.now()
 
-    return {
+    ctx = {
         "windSpeedKmh": weather.wind_speed_kmh,
         "windDirDeg": weather.wind_dir_deg,
         "windDirectionCardinal": weather.wind_direction_cardinal,
@@ -288,6 +261,24 @@ def build_rule_context(
         "current_speed": None,
     }
 
+    # v1.3 additions
+    if daylight_data:
+        ctx["isDaylight"] = daylight_data.get("isDaylight", True)
+    else:
+        ctx["isDaylight"] = True  # safe default
+
+    if water_mass_proxy:
+        ctx["waterMassProxy"] = water_mass_proxy.get("type", "neutral")
+        ctx["waterMassStrength"] = water_mass_proxy.get("strength", 0.0)
+    else:
+        ctx["waterMassProxy"] = "neutral"
+        ctx["waterMassStrength"] = 0.0
+
+    # Spot sheltered directions (safe default: empty list)
+    ctx["shelteredFrom"] = getattr(spot, "sheltered_from", None) or []
+
+    return ctx
+
 
 # --- Rule Evaluation Result ---
 
@@ -297,35 +288,42 @@ class RuleResult:
     def __init__(self) -> None:
         self.is_no_go: bool = False
         self.no_go_reasons_tr: list[str] = []
-        self.species_bonuses: dict[str, int] = {}  # species_id → sum of bonuses
-        self.technique_hints: dict[str, list[str]] = {}  # species_id → techniques
-        self.remove_techniques: dict[str, list[str]] = {}  # species_id → techniques to remove
-        self.mode_hints: dict[str, tuple[int, str]] = {}  # species_id → (priority, mode)
-        self.messages_tr: list[tuple[int, str]] = []  # (priority, message) for sorting
+        self.species_bonuses: dict[str, int] = {}
+        self.technique_hints: dict[str, list[str]] = {}
+        self.remove_techniques: dict[str, list[str]] = {}
+        self.mode_hints: dict[str, tuple[int, str]] = {}
+        self.messages_tr: list[tuple[int, str]] = []
         self.active_rules: list[dict[str, Any]] = []
+        self.fired_rules_count: int = 0
+        # v1.3 category cap trace
+        self.category_raw_bonuses: dict[str, dict[str, int]] = {}   # species → {cat → raw}
+        self.category_capped_bonuses: dict[str, dict[str, int]] = {}  # species → {cat → capped}
+        # v1.3.1 enhanced trace (positive-only totalCap)
+        self.positive_total_raw: dict[str, int] = {}    # before totalCap
+        self.positive_total_capped: dict[str, int] = {} # after totalCap
+        self.negative_total: dict[str, int] = {}         # sum of all negatives
+        self.final_rule_bonus: dict[str, int] = {}       # final = capped_pos + neg
 
 
 def evaluate_rules(
     rules: list[dict[str, Any]],
     context: dict[str, Any],
     species_list: Optional[list[str]] = None,
+    scoring_config: Optional[dict[str, Any]] = None,
 ) -> RuleResult:
-    """Tüm kuralları evaluate eder ve conflict resolution uygular.
+    """Tüm kuralları evaluate eder ve category-based caps ile conflict resolution uygular.
 
-    Args:
-        rules: Validated rules listesi.
-        context: Evaluation context.
-        species_list: Hedef türler. None ise TIER1_SPECIES.
-
-    Returns:
-        RuleResult: Tüm sonuçlar birleştirilmiş.
+    v1.3: Per-category caps from scoring_config["ruleBonusCaps"].
     """
     if species_list is None:
         species_list = TIER1_SPECIES
 
     result = RuleResult()
 
-    # Sort by priority DESC for conflict resolution
+    # Track bonuses per species per category for capping
+    # species → category → sum of raw bonuses
+    cat_bonuses: dict[str, dict[str, int]] = {}
+
     sorted_rules = sorted(rules, key=lambda r: r.get("priority", 1), reverse=True)
 
     for rule in sorted_rules:
@@ -333,11 +331,12 @@ def evaluate_rules(
         effects = rule.get("effects", [])
         priority = rule.get("priority", 1)
         message_tr = rule.get("messageTR", "")
+        category = rule.get("category") or _infer_category(priority)
 
         if not evaluate_condition(condition, context):
             continue
 
-        # Rule matched
+        result.fired_rules_count += 1
         rule_affected_species: list[str] = []
 
         for effect in effects:
@@ -348,16 +347,19 @@ def evaluate_rules(
             mode_hint = effect.get("modeHint")
             no_go = effect.get("noGo", False)
 
-            # Resolve wildcard
             target_species = species_list if "*" in apply_to else [
                 s for s in apply_to if s in species_list or s in ALL_SPECIES
             ]
 
             for sp in target_species:
-                # scoreBonus: sum
+                # Track by category
+                if sp not in cat_bonuses:
+                    cat_bonuses[sp] = {}
+                cat_bonuses[sp][category] = cat_bonuses[sp].get(category, 0) + score_bonus
+
+                # Sum into species_bonuses (raw, will be capped later)
                 result.species_bonuses[sp] = result.species_bonuses.get(sp, 0) + score_bonus
 
-                # techniqueHints: merge dedup
                 if technique_hints:
                     existing = result.technique_hints.get(sp, [])
                     for th in technique_hints:
@@ -365,7 +367,6 @@ def evaluate_rules(
                             existing.append(th)
                     result.technique_hints[sp] = existing
 
-                # removeFromTechniques: merge dedup
                 if remove_techniques:
                     existing_rm = result.remove_techniques.get(sp, [])
                     for rt in remove_techniques:
@@ -373,7 +374,6 @@ def evaluate_rules(
                             existing_rm.append(rt)
                     result.remove_techniques[sp] = existing_rm
 
-                # modeHint: highest priority wins
                 if mode_hint:
                     current = result.mode_hints.get(sp)
                     if current is None or priority > current[0] or (
@@ -383,31 +383,68 @@ def evaluate_rules(
 
                 rule_affected_species.append(sp)
 
-            # noGo: any true → NO-GO
             if no_go:
                 result.is_no_go = True
                 if message_tr not in result.no_go_reasons_tr:
                     result.no_go_reasons_tr.append(message_tr)
 
-        # Record message
         if message_tr:
             result.messages_tr.append((priority, message_tr))
 
-        # Record active rule
         result.active_rules.append({
             "ruleId": rule["id"],
-            "appliedBonus": sum(
-                e.get("scoreBonus", 0) for e in effects
-            ),
+            "category": category,
+            "appliedBonus": sum(e.get("scoreBonus", 0) for e in effects),
             "affectedSpecies": list(set(rule_affected_species)),
             "messageTR": message_tr,
         })
 
-    # Apply bonus cap: per-species max +30 (negatives uncapped)
-    for sp in result.species_bonuses:
-        bonus = result.species_bonuses[sp]
-        if bonus > 30:
-            result.species_bonuses[sp] = 30
+    # --- Category-based capping ---
+    if scoring_config and "ruleBonusCaps" in scoring_config:
+        caps = scoring_config["ruleBonusCaps"]
+    else:
+        caps = {"windCoastRules": 12, "istanbulSpecial": 10,
+                "techniqueTime": 8, "weatherMode": 15, "totalCap": 25}
+
+    # Map category names to cap config keys
+    cat_cap_map = {
+        "windCoast": caps.get("windCoastRules", 12),
+        "istanbul": caps.get("istanbulSpecial", 10),
+        "techniqueTime": caps.get("techniqueTime", 8),
+        "weatherMode": caps.get("weatherMode", 15),
+        "absolute": 999,  # no cap on absolute rules
+    }
+    total_cap = caps.get("totalCap", 25)
+
+    for sp in list(result.species_bonuses.keys()):
+        sp_cats = cat_bonuses.get(sp, {})
+        result.category_raw_bonuses[sp] = dict(sp_cats)
+
+        positive_total = 0
+        negative_total = 0
+        capped_cats: dict[str, int] = {}
+
+        for cat, raw_bonus in sp_cats.items():
+            cap_val = cat_cap_map.get(cat, total_cap)
+            if raw_bonus > 0:
+                capped = min(raw_bonus, cap_val)
+                positive_total += capped
+            else:
+                capped = raw_bonus
+                negative_total += capped
+            capped_cats[cat] = capped
+
+        result.category_capped_bonuses[sp] = capped_cats
+
+        # v1.3.1: totalCap applies only to positives; negatives added after
+        capped_positive = min(positive_total, total_cap)
+        final_bonus = capped_positive + negative_total
+
+        result.positive_total_raw[sp] = positive_total
+        result.positive_total_capped[sp] = capped_positive
+        result.negative_total[sp] = negative_total
+        result.final_rule_bonus[sp] = final_bonus
+        result.species_bonuses[sp] = final_bonus
 
     # Apply removeFromTechniques AFTER merge
     for sp in result.technique_hints:
@@ -420,14 +457,7 @@ def evaluate_rules(
 
 
 def get_combined_messages(result: RuleResult) -> str:
-    """Rule messageTR'leri birleştirir (priority DESC, " | " separator).
-
-    Args:
-        result: RuleResult.
-
-    Returns:
-        Birleştirilmiş mesaj string'i.
-    """
+    """Rule messageTR'leri birleştirir (priority DESC, " | " separator)."""
     sorted_msgs = sorted(result.messages_tr, key=lambda x: x[0], reverse=True)
     unique_msgs: list[str] = []
     for _, msg in sorted_msgs:

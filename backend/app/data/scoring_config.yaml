@@ -1,0 +1,107 @@
+# FishCast Scoring Configuration
+# Contract Version: 1.3 | 2026-02-22
+#
+# All scoring thresholds and tuning parameters live here (NOT in code).
+# This keeps the invariant: no hardcoded fishing knowledge in code.
+
+# --- Species Weights (sum to 1.0 per species) ---
+# Order: pressure, wind, sea_temp, solunar, time
+speciesWeights:
+  istavrit:  { pressure: 0.15, wind: 0.20, sea_temp: 0.25, solunar: 0.20, time: 0.20 }
+  cinekop:   { pressure: 0.25, wind: 0.20, sea_temp: 0.15, solunar: 0.20, time: 0.20 }
+  sarikanat: { pressure: 0.25, wind: 0.20, sea_temp: 0.15, solunar: 0.20, time: 0.20 }
+  palamut:   { pressure: 0.20, wind: 0.20, sea_temp: 0.20, solunar: 0.20, time: 0.20 }
+  karagoz:   { pressure: 0.15, wind: 0.15, sea_temp: 0.20, solunar: 0.25, time: 0.25 }
+  lufer:     { pressure: 0.20, wind: 0.20, sea_temp: 0.15, solunar: 0.25, time: 0.20 }
+  levrek:    { pressure: 0.15, wind: 0.15, sea_temp: 0.15, solunar: 0.25, time: 0.30 }
+  kolyoz:    { pressure: 0.15, wind: 0.20, sea_temp: 0.25, solunar: 0.20, time: 0.20 }
+  mirmir:    { pressure: 0.10, wind: 0.15, sea_temp: 0.25, solunar: 0.20, time: 0.30 }
+
+# --- Species Temperature Ranges ---
+# min/max: ideal range (°C), pen: penalty divisor outside range
+speciesTemp:
+  istavrit:  { min: 10, max: 22, pen: 20 }
+  cinekop:   { min: 12, max: 20, pen: 20 }
+  sarikanat: { min: 12, max: 20, pen: 20 }
+  palamut:   { min: 14, max: 22, pen: 20 }
+  karagoz:   { min: 10, max: 26, pen: 10 }
+  lufer:     { min: 12, max: 22, pen: 20 }
+  levrek:    { min: 8,  max: 24, pen: 15 }
+  kolyoz:    { min: 14, max: 24, pen: 20 }
+  mirmir:    { min: 10, max: 26, pen: 10 }
+
+# --- Species Best Hours ---
+# Pairs of [start, end] in 24h format. Midnight wrapping supported.
+speciesBestHours:
+  istavrit:  [[5, 8], [16, 19]]
+  cinekop:   [[16, 20]]
+  sarikanat: [[16, 20]]
+  palamut:   [[5, 9], [16, 19]]
+  karagoz:   [[20, 23], [0, 5]]
+  lufer:     [[5, 8], [16, 20]]
+  levrek:    [[20, 23], [0, 5]]
+  kolyoz:    [[5, 9], [16, 19]]
+  mirmir:    [[20, 23], [5, 8]]
+
+# --- Pressure Thresholds (mode engine) ---
+# NOT hardcoded in code — configurable here
+pressureThresholds:
+  fallingThreshold: -1.0       # hPa/3h — below this = falling
+  risingThreshold: 1.0         # hPa/3h — above this = rising
+  rapidFallingThreshold: -2.5  # hPa/3h — rapid fall → feeding frenzy
+  rapidRisingThreshold: 2.5    # hPa/3h — rapid rise → fish go deep
+  extremeChangeThreshold: 3.0  # hPa/3h — extreme → holding mode
+
+# --- Rule Bonus Category Caps ---
+# Prevents score inflation from stacking too many rules
+ruleBonusCaps:
+  windCoastRules: 12    # max bonus from wind+shore rules (priority 9)
+  istanbulSpecial: 10   # max bonus from Istanbul-specific rules (priority 5-6)
+  techniqueTime: 8      # max bonus from time+technique rules (priority 4-5)
+  weatherMode: 15       # max bonus from weather+mode rules (priority 7-8)
+  totalCap: 25          # absolute max bonus across all categories
+  # Category assignment by rule priority ranges:
+  # priority 9: windCoastRules
+  # priority 7-8: weatherMode
+  # priority 5-6: istanbulSpecial
+  # priority 4-5: techniqueTime (overlap resolved: priority 5 with technique → techniqueTime)
+
+# --- Wind Exposure Score Adjustments ---
+# Applied per-spot based on windExposureMap in spots.json
+windExposureAdjustments:
+  favorable: 0.08   # wind from behind/side — modest boost to wind_score
+  neutral: 0.0      # no effect
+  hostile: -0.10    # wind in face — penalty to wind_score
+
+# --- Water Mass Proxy (Lodos vs Poyraz) ---
+# Derived from wind direction; affects species scores differentially
+waterMassProxy:
+  # Lodos (SW/S) pushes warm Marmara water into Bosphorus
+  lodosDirections: ["SW", "S"]
+  # Poyraz (NE/N) brings cold Black Sea water
+  poyrazDirections: ["NE", "N"]
+  # Strength thresholds
+  weakThreshold: 10   # km/h — below this, proxy effect is minimal
+  strongThreshold: 20 # km/h — above this, full proxy effect
+
+# --- Confidence Factors ---
+confidenceFactors:
+  dataQualityBase:
+    live: 0.85
+    cached: 0.65
+    fallback: 0.45
+  reportBoost: 0.10           # boost if reports exist in 24h
+  approxCoordPenalty: 0.05    # penalty for approx coordinates
+  firedRulesThreshold: 6      # if more rules fire, reduce confidence slightly
+  firedRulesPenalty: 0.03     # per extra rule above threshold
+  maxFiredRulesPenalty: 0.15  # cap on this penalty
+  seasonOffPenalty: 0.20      # penalty when off-season
+  seasonShoulderPenalty: 0.05 # slight penalty for shoulder season
+
+# --- Sheltered Cove NO-GO Exceptions ---
+# Global noGo still triggers at >=35 km/h (via nogo_extreme_wind rule)
+# But sheltered spots can have exceptions for low-risk techniques
+shelteredExceptions:
+  allowedTechniques: ["lrf"]  # only these during sheltered exception
+  warningLevel: "severe"      # always severe
+  # Spots define their own shelteredFrom in spots.json

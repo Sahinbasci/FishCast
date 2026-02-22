@@ -1,17 +1,23 @@
 # SCORING_ENGINE.md — FishCast Skor Motoru
 
-> Contract Version: 1.2 | 2026-02-19
+> Contract Version: 1.3.2 | 2026-02-22
 
-## Formül
+## Formül (v1.3 — Additive Season)
 ```
+weighted_sum = Σ(ağırlık_i × param_skor_i)          # 0.0–1.0
+season_adj   = compute_season_adjustment(species, month, weighted_sum)  # additive int
+capped_bonus = category_capped_rule_bonus(species)   # see § Category Caps
+
 TürSkoru = clamp(0, 100,
-    round(Σ(ağırlık_i × param_skor_i) × 100 × sezon_çarpanı)
-    + min(30, Σ(kural_bonusu))
+    round(weighted_sum × 100 + season_adj) + capped_bonus
 )
 ```
 
-> **Rule bonus cap:** Per-species max **+30 puan**. Negatif bonuslar cap'lenmez.
+> **v1.2→v1.3 breaking change:** `sezon_çarpanı` (multiplicative, 0.0/1.0/1.2) replaced with `season_adj` (additive int). Off-season scores are **never zeroed** — they get a negative adjustment (e.g. -22) but remain positive.
+>
+> **Rule bonus cap:** Per-category caps + totalCap=25. See § Category Caps.
 > **Final clamp:** Her tür skoru [0, 100] aralığına sıkıştırılır.
+> **Backward compat:** `breakdown.seasonMultiplier` always 1.0 (deprecated). `breakdown.seasonAdjustment` is the authoritative additive value.
 
 ## Tür-Özel Ağırlıklar (toplam 1.0)
 
@@ -73,8 +79,23 @@ Major period=1.0, approaching major=0.7, minor period=0.7, outside=0.3+moon_bonu
 ### 5. Zaman
 Species-specific best hours. Night bonus: karagöz +0.3, levrek +0.3.
 
-## Sezon Çarpanı
-out_of_season=0.0, in_season=1.0, peak=1.2.
+## Season Adjustment (v1.3 — Additive)
+
+Config-driven via `seasonality.yaml`. Per-species entries define:
+- `peakMonths`, `peakAdjustment` (e.g. +15)
+- `shoulderMonths`, `shoulderAdjustment` (e.g. +5)
+- `offMonths`, `offAdjustment` (e.g. -25)
+- `offFloor` (minimum score contribution, e.g. 8)
+- `parcaConditionThreshold` (weighted_sum threshold for parça ihtimali)
+- `parcaPenaltyReduction` (penalty reduction when parça triggers)
+- `confidenceImpact` per status (0.0 for peak, 0.35 for off)
+
+**Parça Behavior:** Off-season + high weighted_sum → penalty reduced. "Parça ihtimali" flag set.
+
+**Season statuses:** `"peak"`, `"shoulder"` (NEW v1.3), `"active"`, `"off"` (v1.3.1: canonical, replaces "closed" mapping).
+`"off"` = off-season (fish catchable via parça). `"closed"` retained in enum for backward compat but no longer emitted by scoring engine.
+
+> **DEPRECATED:** `seasonMultiplier` always returns 1.0 in breakdown. Use `seasonAdjustment` instead.
 
 ---
 
@@ -138,25 +159,25 @@ def derive_mode(species, weather, solunar, spot, report_signals=None):
 
 ---
 
-## Confidence Computation
+## Confidence Computation (v1.3)
+
+Config-driven via `scoring_config.yaml["confidenceFactors"]`.
 
 ```python
-def compute_confidence(data_quality, has_reports_24h, season_mult):
-    """
-    Simple, stable confidence formula.
-    Returns: float 0.0-1.0
-    """
-    base = {"live": 0.9, "cached": 0.7, "fallback": 0.5}[data_quality]
+def compute_confidence(data_quality, has_reports_24h, season_status,
+                       season_confidence_impact, scoring_config,
+                       coord_accuracy="approx", fired_rules_count=0):
+    factors = scoring_config["confidenceFactors"]
+    base = factors["dataQualityBase"][data_quality]      # live=0.9, cached=0.7, fallback=0.5
     if has_reports_24h:
-        base = min(1.0, base + 0.1)
-    if season_mult == 0:
-        return 0.0  # off-season
-    if season_mult < 1.0:
-        base *= 0.9  # slight penalty for non-peak
-    return round(base, 2)
+        base += factors["reportBoost"]                    # +0.1
+    if coord_accuracy == "approx":
+        base -= factors.get("approxCoordPenalty", 0.05)   # -0.05
+    base -= season_confidence_impact                      # off=0.35, shoulder=0.1, peak=0.0
+    return max(0.1, round(base, 2))                       # NEVER 0.0
 ```
 
-> Basit ve stabil. Overcomplexity yok. `dataQuality` enum direkt kullanılır.
+> **v1.3:** Confidence **never returns 0.0** (min 0.1). Off-season reduces confidence but does not eliminate it.
 
 ---
 
@@ -170,7 +191,7 @@ Kural: `nogo_extreme_wind` (priority 10, rules.yaml). Bu kural match ettiğinde:
 3. `overallScore = 0`
 4. Tür skorları yine hesaplanır (explanation amaçlı), `suppressedByNoGo = true`
 
-E�er gelecekte başka NO-GO tetikleyicileri eklenecekse, yeni bir rule yazılır (priority 10). Kod DEĞİŞMEZ.
+E�er gelecekte başka NO-GO tetikleyicileri eklenecekse, yeni bir rule yazılır (priority 10). Kod DEĞİŞMEZ.
 
 ---
 
@@ -191,24 +212,51 @@ E�er gelecekte başka NO-GO tetikleyicileri eklenecekse, yeni bir rule yazılır
 
 All condition fields are AND'd. Lists are OR within field.
 
-### Rule Schema
+### Rule Schema (v1.3)
 ```yaml
 - id: string               # unique, snake_case
   condition: {}             # all AND'd
   effects:
     - applyToSpecies: ["*"] | ["species_id", ...]
-      scoreBonus: int       # capped at +30 per species (summed across rules)
+      scoreBonus: int       # capped per-category + totalCap
       techniqueHints: []    # optional
       removeFromTechniques: [] # optional
       modeHint: null        # optional: "chasing"|"selective"|"holding"
       noGo: false           # optional
   messageTR: string
   priority: 1-10
+  category: string          # NEW v1.3: "absolute"|"windCoast"|"weatherMode"|"istanbul"|"techniqueTime"
 ```
+
+### Rule Categories (v1.3)
+| Category | Priority Range | Description |
+|----------|---------------|-------------|
+| `absolute` | 10 | NoGo triggers, hard constraints |
+| `windCoast` | 9 | Shore-specific wind effects |
+| `weatherMode` | 7-8 | Pressure, temperature, water mass |
+| `istanbul` | 5-6 | Istanbul-specific spot/corridor rules |
+| `techniqueTime` | 4-5 | Time-of-day technique recommendations |
+
+### Category Caps (v1.3)
+Per-species bonus capping from `scoring_config.yaml["ruleBonusCaps"]`:
+```yaml
+ruleBonusCaps:
+  windCoastRules: 12
+  weatherModeRules: 15
+  istanbulRules: 10
+  techniqueTimeRules: 8
+  totalCap: 25
+```
+
+1. Group fired rule bonuses by `category` per species.
+2. Apply per-category cap (e.g., windCoast max 12).
+3. Sum capped **positive** categories → apply totalCap (25) to positives only.
+4. Negative bonuses **not capped** — added after totalCap: `final = min(totalCap, Σpos_capped) + Σneg`.
+5. Trace data stored: `category_raw_bonuses`, `category_capped_bonuses`, `positive_total_raw`, `positive_total_capped`, `negative_total`, `final_rule_bonus`.
 
 ### Conflict Resolution
 1. All matching rules fire (no short-circuit).
-2. `scoreBonus`: summed per species, then capped at +30.
+2. `scoreBonus`: summed per species per category, category-capped, then totalCap'd.
 3. `techniqueHints`: merged, deduped, priority-ordered.
 4. `removeFromTechniques`: applied after merge.
 5. `modeHint`: highest priority wins. Same priority → alphabetical first.
@@ -218,10 +266,28 @@ All condition fields are AND'd. Lists are OR within field.
 ### Startup Validation
 `rules.yaml` validated against `rules_schema.json` at boot. Invalid → app crash with error.
 
-### 24 Rules
+### New Condition Fields (v1.3)
+| Field | Type | Source |
+|-------|------|--------|
+| `isDaylight` | bool | `compute_daylight()` via ephem |
+| `waterMassProxy` | string | `"lodos"\|"poyraz"\|"neutral"` from wind + config |
+| `waterMassStrength` | float | 0.0–1.0, linear between weak/strong thresholds |
+| `shelteredFrom` | list[str] | From spot data, 8-cardinal directions |
+
+### Wind Normalization (v1.3)
+Single canonical utility: `app/utils/wind.py`
+- `degrees_to_cardinal_8(deg)` — 0→N, 45→NE, 90→E, ...
+- `normalize_cardinal_8(card)` — NNE→NE, WSW→SW, ...
+
+### Water Mass Proxy (v1.3)
+Lodos (SW/S) pushes warm Marmara water into Bosphorus → palamut favorable.
+Poyraz (NE/N) pushes cold Black Sea water → bluefish (cinekop/sarıkanat) favorable.
+Config: `scoring_config.yaml["waterMassProxy"]`.
+
+### 31 Rules (24 original + 7 new)
 
 ```yaml
-# === ABSOLUTE (Priority 10) ===
+# === ABSOLUTE (Priority 10) === [category: absolute]
 - id: "nogo_extreme_wind"
   condition: {windSpeedKmh: ">=35"}
   effects: [{applyToSpecies: ["*"], scoreBonus: 0, noGo: true}]
@@ -369,14 +435,101 @@ All condition fields are AND'd. Lists are OR within field.
   effects: [{applyToSpecies: ["karagoz"], scoreBonus: 8, techniqueHints: ["lrf","yemli_dip"], removeFromTechniques: ["spin","capari","shore_jig"]}]
   messageTR: "Gece kayalık — karagöz LRF/yemli dip ile, spin/çapari kaçın."
   priority: 5
+  category: istanbul
+
+# === NEW v1.3 RULES ===
+
+- id: "lodos_palamut_water_boost"
+  condition: {waterMassProxy: "lodos", waterMassStrength: ">=0.3"}
+  effects: [{applyToSpecies: ["palamut"], scoreBonus: 10, modeHint: "chasing"}]
+  messageTR: "Lodos sıcak Marmara suyu getiriyor — palamut aktif!"
+  priority: 7
+  category: weatherMode
+
+- id: "lodos_bluefish_water_penalty"
+  condition: {waterMassProxy: "lodos", waterMassStrength: ">=0.3"}
+  effects: [{applyToSpecies: ["cinekop","sarikanat"], scoreBonus: -8}]
+  messageTR: "Lodos sıcak su — çinekop/sarıkanat pasifleşiyor."
+  priority: 7
+  category: weatherMode
+
+- id: "poyraz_bluefish_water_boost"
+  condition: {waterMassProxy: "poyraz", waterMassStrength: ">=0.3"}
+  effects: [{applyToSpecies: ["cinekop","sarikanat"], scoreBonus: 10, modeHint: "chasing"}]
+  messageTR: "Poyraz soğuk Karadeniz suyu — çinekop/sarıkanat hareketleniyor!"
+  priority: 7
+  category: weatherMode
+
+- id: "poyraz_palamut_water_penalty"
+  condition: {waterMassProxy: "poyraz", waterMassStrength: ">=0.3"}
+  effects: [{applyToSpecies: ["palamut"], scoreBonus: -5}]
+  messageTR: "Poyraz soğuk su — palamut yavaşlıyor."
+  priority: 7
+  category: weatherMode
+
+- id: "pressure_falling_aggressive"
+  condition: {pressureTrend: "falling", pressureChange3hHpa: "<-1.5"}
+  effects: [{applyToSpecies: ["*"], scoreBonus: 5, modeHint: "chasing", techniqueHints: ["spin","kursun_arkasi"]}]
+  messageTR: "Basınç hızla düşüyor — aktif avlanma zamanı!"
+  priority: 7
+  category: weatherMode
+
+- id: "pressure_rising_passive"
+  condition: {pressureTrend: "rising", pressureChange3hHpa: ">1.5"}
+  effects: [{applyToSpecies: ["*"], scoreBonus: -3, modeHint: "holding", techniqueHints: ["yemli_dip"]}]
+  messageTR: "Basınç yükseliyor — balık pasif, dip tekniği tercih et."
+  priority: 7
+  category: weatherMode
+
+- id: "summer_low_wind_lrf"
+  condition: {month: [6,7,8], windSpeedKmh: "<=10"}
+  effects: [{applyToSpecies: ["istavrit","karagoz","mirmir"], scoreBonus: 5, techniqueHints: ["lrf"]}]
+  messageTR: "Yaz sakin — LRF ile küçük balık avı ideal!"
+  priority: 5
+  category: techniqueTime
 ```
 
+## Sheltered Exceptions (v1.3)
+
+When noGo triggers (wind >= 35 km/h), sheltered spots are listed as exceptions:
+- Check each spot's `shelteredFrom[]` against normalized wind cardinal
+- If sheltered → add to `noGo.shelteredExceptions[]`
+- Each entry: `{spotId, allowedTechniques: ["lrf"], warningLevel: "severe", messageTR}`
+- Only LRF allowed at sheltered spots during noGo
+
+## Dependency Injection (v1.3)
+
+All scoring/rules functions accept configs explicitly — no module-level globals.
+- `scoring_config`: loaded from `scoring_config.yaml` at startup → `app.state.scoring_config`
+- `seasonality_config`: loaded from `seasonality.yaml` at startup → `app.state.seasonality_config`
+- Configs validated at startup (species keys must match SpeciesId enum)
+
 ## Ruleset Versioning
-Format: `"YYYYMMDD.N"`. Her score/decision doc'ta `meta` içinde. Git revert ile rollback.
+Format: `"YYYYMMDD.N"`. Current: `20260222.2`. Her score/decision doc'ta `meta` içinde. Git revert ile rollback.
+
+## Trace Guard (v1.3.2)
+
+Env var `ALLOW_TRACE_FULL` (default `"false"`) gates `traceLevel=full` in production:
+- When `false`: `full` requests downgraded to `minimal`
+- Meta includes `traceLevelRequested` / `traceLevelApplied` when downgraded
+- `none` and `minimal` always allowed regardless of env
+
+## Telemetry (v1.3.2)
+
+Structured JSON logging via `fishcast.telemetry` logger after each `generate_decision()`:
+- Event: `decision_generated`
+- Fields: contractVersion, healthStatus, dataQuality, noGo, topSpecies[:3], latencyMs, regionCount
+- Compatible with Cloud Run structured logging (jsonPayload)
 
 ## Testing
 1. Per-rule: min 1 test / kural
 2. Determinism: same input → same output
-3. Mode: golden fixtures (3 gün) — `TASKS.md § Golden Fixtures`
-4. Bonus cap: no species exceeds +30 from rules
+3. Mode: golden fixtures (4 scenarios) — `TASKS.md § Golden Fixtures`
+4. Category caps: per-category + totalCap enforced with trace
 5. Startup: rules.yaml JSON Schema → invalid = crash
+6. Contract compat: dual-field (seasonAdjustment + seasonMultiplier), no zero scores
+7. Wind normalization: 8-cardinal and 16→8 mapping
+8. Daylight: timezone-safe Istanbul compute
+9. Health block: reasonsCode + reasonsTR + reasons alias (v1.3.2)
+10. Trace guard: blocked/allowed/meta shows downgrade (v1.3.2)
+11. Smoke script: 4 offline scenarios — `backend/scripts/smoke_decision.py`

@@ -10,7 +10,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.models.spot import SpotOut
 from app.services.decision import SPECIES_NAME_TR, compute_spot_scores
@@ -26,17 +26,10 @@ async def _get_scores_for_spots(
     spots: list[SpotOut],
     rules: list[dict[str, Any]],
     stormglass_key: str | None = None,
+    scoring_config: dict[str, Any] | None = None,
+    seasonality_config: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], Any, dict[str, Any]]:
-    """Tüm mera'lar için weather + solunar + scores hesaplar.
-
-    Args:
-        spots: Mera listesi.
-        rules: Validated rules.
-        stormglass_key: Stormglass API key.
-
-    Returns:
-        (spot_results dict, weather, solunar_data).
-    """
+    """Tüm mera'lar için weather + solunar + scores hesaplar."""
     weather = await get_weather(stormglass_api_key=stormglass_key)
     solunar_data = compute_solunar()
     now = datetime.now()
@@ -49,6 +42,8 @@ async def _get_scores_for_spots(
             solunar_data=solunar_data,
             rules=rules,
             now=now,
+            scoring_config=scoring_config,
+            seasonality_config=seasonality_config,
         )
 
     return spot_results, weather, solunar_data
@@ -69,7 +64,14 @@ async def scores_today(request: Request) -> list[dict[str, Any]]:
     rules = getattr(request.app.state, "rules", [])
     stormglass_key = getattr(request.app.state, "stormglass_api_key", None)
 
-    spot_results, weather, _ = await _get_scores_for_spots(spots, rules, stormglass_key)
+    scoring_config = getattr(request.app.state, "scoring_config", None)
+    seasonality_config = getattr(request.app.state, "seasonality_config", None)
+
+    spot_results, weather, _ = await _get_scores_for_spots(
+        spots, rules, stormglass_key,
+        scoring_config=scoring_config,
+        seasonality_config=seasonality_config,
+    )
 
     result: list[dict[str, Any]] = []
     for spot in spots:
@@ -118,7 +120,11 @@ def _get_top_species(species_scores: dict[str, Any], limit: int = 3) -> list[dic
     summary="Tek mera detaylı skoru",
     description="Belirtilen meranın detaylı skor bilgisini döner. speciesScores ARRAY olarak.",
 )
-async def score_spot_detail(request: Request, spot_id: str) -> dict[str, Any]:
+async def score_spot_detail(
+    request: Request,
+    spot_id: str,
+    trace_level: str = Query("none", alias="traceLevel", pattern="^(none|minimal|full)$"),
+) -> dict[str, Any]:
     """Tek bir meranın detaylı skorunu döner.
 
     speciesScores MAP → ARRAY transform burada yapılır.
@@ -126,6 +132,7 @@ async def score_spot_detail(request: Request, spot_id: str) -> dict[str, Any]:
 
     Args:
         spot_id: Mera kimliği.
+        trace_level: Trace detail level (none|minimal|full).
 
     Returns:
         Detaylı skor dict'i.
@@ -141,6 +148,13 @@ async def score_spot_detail(request: Request, spot_id: str) -> dict[str, Any]:
     if spot is None:
         raise HTTPException(status_code=404, detail=f"Mera bulunamadı: {spot_id}")
 
+    scoring_config = getattr(request.app.state, "scoring_config", None)
+    seasonality_config = getattr(request.app.state, "seasonality_config", None)
+
+    # v1.3.2: Trace guard — block full trace unless ALLOW_TRACE_FULL=true
+    allow_full = getattr(request.app.state, "allow_trace_full", False)
+    applied_level = trace_level if trace_level != "full" or allow_full else "minimal"
+
     weather = await get_weather(stormglass_api_key=stormglass_key)
     solunar_data = compute_solunar()
     now = datetime.now()
@@ -151,6 +165,9 @@ async def score_spot_detail(request: Request, spot_id: str) -> dict[str, Any]:
         solunar_data=solunar_data,
         rules=rules,
         now=now,
+        scoring_config=scoring_config,
+        seasonality_config=seasonality_config,
+        trace_level=applied_level,
     )
 
     # MAP → ARRAY Transform (API_CONTRACTS.md § MAP vs ARRAY Transform)
@@ -174,11 +191,11 @@ async def score_spot_detail(request: Request, spot_id: str) -> dict[str, Any]:
             "breakdown": sp_data.get("breakdown"),
         })
 
-    return {
+    response: dict[str, Any] = {
         "spotId": spot_id,
         "date": now.strftime("%Y-%m-%d"),
         "meta": {
-            "contractVersion": "1.2",
+            "contractVersion": "1.3",
             "generatedAt": now.isoformat(),
             "timezone": "Europe/Istanbul",
         },
@@ -189,3 +206,12 @@ async def score_spot_detail(request: Request, spot_id: str) -> dict[str, Any]:
         "speciesScores": species_array,
         "activeRules": result["activeRules"],
     }
+    if "trace" in result:
+        response["trace"] = result["trace"]
+
+    # v1.3.2: If trace was downgraded, indicate in meta
+    if applied_level != trace_level:
+        response["meta"]["traceLevelRequested"] = trace_level
+        response["meta"]["traceLevelApplied"] = applied_level
+
+    return response

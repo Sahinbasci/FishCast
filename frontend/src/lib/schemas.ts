@@ -22,7 +22,7 @@ export const RegionId = z.enum(["anadolu", "avrupa", "city_belt"]);
 export const SpeciesMode = z.enum(["chasing", "selective", "holding"]);
 export const DataQuality = z.enum(["live", "cached", "fallback"]);
 export const PressureTrend = z.enum(["falling", "rising", "stable"]);
-export const SeasonStatus = z.enum(["peak", "active", "closed"]);
+export const SeasonStatus = z.enum(["peak", "shoulder", "active", "off", "closed"]);
 export const CoordAccuracy = z.enum(["approx", "verified"]);
 
 // === DECISION OUTPUT SCHEMAS ===
@@ -30,6 +30,8 @@ export const DecisionMeta = z.object({
   contractVersion: z.string(),
   generatedAt: z.string(),
   timezone: z.string(),
+  traceLevelRequested: z.string().optional(),
+  traceLevelApplied: z.string().optional(),
 });
 
 export const DaySummary = z.object({
@@ -102,9 +104,30 @@ export const RegionDecision = z.object({
   recommendedSpot: RecommendedSpot,
 });
 
+export const ShelteredExceptionEntry = z.object({
+  spotId: z.string(),
+  spotNameTR: z.string().optional(),
+  allowedTechniques: z.array(z.string()),
+  warningLevel: z.string(),
+  messageTR: z.string(),
+});
+
 export const NoGo = z.object({
   isNoGo: z.boolean(),
   reasonsTR: z.array(z.string()),
+  shelteredExceptions: z.array(ShelteredExceptionEntry).optional(), // v1.3
+});
+
+export const HealthBlock = z.object({
+  status: z.enum(["good", "degraded", "bad"]),
+  reasonsCode: z.array(z.string()).optional(),
+  reasonsTR: z.array(z.string()).optional(),
+  reasons: z.array(z.string()).optional(),
+  normalized: z.object({
+    windSpeedKmhRaw: z.number(),
+    windCardinalDerived: z.string(),
+    pressureTrendDerived: z.string(),
+  }),
 });
 
 export const DecisionResponse = z.object({
@@ -113,6 +136,7 @@ export const DecisionResponse = z.object({
   bestWindows: z.array(BestWindow),
   regions: z.array(RegionDecision),
   noGo: NoGo,
+  health: HealthBlock.optional(),
 });
 
 // === SCORE SCHEMAS ===
@@ -132,6 +156,7 @@ export const ScoreBreakdown = z.object({
   solunar: z.number(),
   time: z.number(),
   seasonMultiplier: z.number(),
+  seasonAdjustment: z.number().optional(), // v1.3 authoritative
   rulesBonus: z.number(),
 });
 

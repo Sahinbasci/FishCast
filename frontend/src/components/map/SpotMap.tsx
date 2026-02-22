@@ -5,7 +5,6 @@ import dynamic from "next/dynamic";
 import { MAP_CENTER, MAP_ZOOM, REGION_COLORS, getScoreColor } from "@/lib/constants";
 import type { SpotType, SpotScoreSummary } from "@/lib/types";
 
-// Leaflet SSR disabled
 const MapContainer = dynamic(
   () => import("react-leaflet").then((m) => m.MapContainer),
   { ssr: false },
@@ -20,10 +19,6 @@ const CircleMarker = dynamic(
 );
 const Popup = dynamic(
   () => import("react-leaflet").then((m) => m.Popup),
-  { ssr: false },
-);
-const Tooltip = dynamic(
-  () => import("react-leaflet").then((m) => m.Tooltip),
   { ssr: false },
 );
 
@@ -41,8 +36,11 @@ export default function SpotMap({ spots, scores }: SpotMapProps) {
 
   if (!mounted) {
     return (
-      <div className="h-[400px] lg:h-[600px] bg-gray-100 rounded-xl flex items-center justify-center">
-        <span className="text-gray-400">Harita yükleniyor...</span>
+      <div className="h-[400px] lg:h-[600px] card flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-6 h-6 mx-auto mb-2 border-2 border-[var(--blue-primary)]/40 border-t-[var(--blue-primary)] rounded-full animate-spin" />
+          <span className="text-[var(--text-dim)] text-sm">Harita yükleniyor...</span>
+        </div>
       </div>
     );
   }
@@ -50,7 +48,7 @@ export default function SpotMap({ spots, scores }: SpotMapProps) {
   const scoreMap = new Map(scores?.map((s) => [s.spotId, s]));
 
   return (
-    <div className="h-[400px] lg:h-[600px] rounded-xl overflow-hidden border border-gray-200">
+    <div className="h-[400px] lg:h-[600px] rounded-[var(--radius-lg)] overflow-hidden border border-[var(--border-subtle)]">
       <link
         rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -66,38 +64,54 @@ export default function SpotMap({ spots, scores }: SpotMapProps) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         {spots.map((spot) => {
-          const score = scoreMap.get(spot.id);
-          const regionColor = REGION_COLORS[spot.regionId] || "#3B82F6";
-          const pinColor = score ? getScoreColor(score.overallScore) : regionColor;
+          const scoreData = scoreMap.get(spot.id);
+          const regionColor = REGION_COLORS[spot.regionId] || "#3b82f6";
+          const pinColor = scoreData ? getScoreColor(scoreData.overallScore) : regionColor;
+          const scoreVal = scoreData?.overallScore;
 
           return (
             <CircleMarker
               key={spot.id}
               center={[spot.lat, spot.lng]}
-              radius={score ? 12 : 8}
+              radius={10}
               pathOptions={{
-                color: pinColor,
+                color: "#0a1628",
                 fillColor: pinColor,
-                fillOpacity: 0.8,
+                fillOpacity: 0.9,
                 weight: 2,
               }}
             >
-              {score && (
-                <Tooltip direction="top" offset={[0, -10]} permanent>
-                  <span className="font-bold text-xs">{score.overallScore}</span>
-                </Tooltip>
-              )}
               <Popup>
-                <div className="text-sm">
-                  <div className="font-bold">{spot.name}</div>
-                  {score && (
-                    <div className="mt-1">
-                      Skor: <strong>{score.overallScore}</strong>
+                <div className="text-sm min-w-[160px]">
+                  <div className="font-bold text-white text-base">{spot.name}</div>
+                  {scoreVal !== undefined && (
+                    <div className="mt-2 flex items-center gap-2.5">
+                      <span
+                        className="score-pill"
+                        style={{
+                          background: `${pinColor}20`,
+                          color: pinColor,
+                          border: `1px solid ${pinColor}40`,
+                        }}
+                      >
+                        {scoreVal}
+                      </span>
+                      <span className="text-[var(--text-muted)] text-xs">Genel Skor</span>
+                    </div>
+                  )}
+                  {scoreData?.topSpecies && scoreData.topSpecies.length > 0 && (
+                    <div className="mt-2 space-y-0.5 text-xs text-[var(--text-secondary)]">
+                      {scoreData.topSpecies.slice(0, 2).map((sp) => (
+                        <div key={sp.speciesId} className="flex justify-between">
+                          <span>{sp.speciesNameTR}</span>
+                          <span className="font-semibold text-white">{sp.score0to100}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
                   <a
                     href={`/spot/${spot.id}`}
-                    className="text-blue-600 hover:underline text-xs mt-1 inline-block"
+                    className="text-[var(--blue-light)] hover:text-[var(--blue-bright)] text-xs mt-2.5 inline-block font-semibold transition-colors"
                   >
                     Detaya Git &rarr;
                   </a>

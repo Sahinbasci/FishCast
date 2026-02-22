@@ -60,6 +60,11 @@
         "type": "integer",
         "minimum": 1,
         "maximum": 10
+      },
+      "category": {
+        "type": "string",
+        "enum": ["absolute", "windCoast", "weatherMode", "istanbul", "techniqueTime"],
+        "description": "Rule bonus cap category. Optional — inferred from priority if omitted."
       }
     },
     "additionalProperties": false

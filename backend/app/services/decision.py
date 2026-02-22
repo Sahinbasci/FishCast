@@ -1,12 +1,14 @@
-"""FishCast decision service.
+"""FishCast decision service — v1.3 hardened.
 
-Decision Output v1 üretir: her region için en iyi mera, bestWindows,
-targets, teknikler, avoidTechniques, whyTR, noGo.
+Decision Output v1.3: config-injected, additive seasonality, category caps,
+sheltered exceptions, water mass proxy, isDaylight.
+Contract version: 1.3.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -21,9 +23,12 @@ from app.services.rules import (
 )
 from app.services.scoring import (
     calculate_species_score,
-    season_multiplier,
+    compute_water_mass_proxy,
 )
+from app.services.solunar import compute_daylight
 from app.services.weather import WeatherData
+from app.utils.telemetry import log_decision_event
+from app.utils.wind import normalize_cardinal_8
 
 logger = logging.getLogger(__name__)
 
@@ -62,18 +67,9 @@ def compute_best_windows(
     solunar_data: dict[str, Any],
     weather: WeatherData,
 ) -> list[dict[str, Any]]:
-    """bestWindows hesaplar: solunar + hava koşullarına göre 2-4 pencere.
-
-    Args:
-        solunar_data: Solunar verisi.
-        weather: WeatherData objesi.
-
-    Returns:
-        BestWindow listesi (2-4 eleman).
-    """
+    """bestWindows hesaplar: solunar + hava koşullarına göre 2-4 pencere."""
     windows: list[dict[str, Any]] = []
 
-    # Major periods → high score windows
     for period in solunar_data.get("majorPeriods", []):
         reasons: list[str] = ["Major solunar periyodu"]
         score = 80
@@ -94,20 +90,15 @@ def compute_best_windows(
             "reasonsTR": reasons,
         })
 
-    # Minor periods → medium score windows
     for period in solunar_data.get("minorPeriods", []):
-        reasons_minor: list[str] = ["Minor solunar periyodu"]
-        score_minor = 65
-
         windows.append({
             "startLocal": period["start"],
             "endLocal": period["end"],
-            "score0to100": min(100, score_minor),
+            "score0to100": 65,
             "confidence0to1": 0.6,
-            "reasonsTR": reasons_minor,
+            "reasonsTR": ["Minor solunar periyodu"],
         })
 
-    # Sort by score DESC, limit to 4
     windows.sort(key=lambda w: w["score0to100"], reverse=True)
     return windows[:4]
 
@@ -119,26 +110,36 @@ def compute_spot_scores(
     rules: list[dict[str, Any]],
     now: datetime,
     report_signals: Optional[dict[str, Any]] = None,
+    scoring_config: Optional[dict[str, Any]] = None,
+    seasonality_config: Optional[dict[str, Any]] = None,
+    daylight_data: Optional[dict[str, Any]] = None,
+    water_mass_proxy: Optional[dict[str, Any]] = None,
+    trace_level: str = "none",
 ) -> dict[str, Any]:
     """Tek bir spot için tüm tür skorlarını hesaplar.
 
-    Args:
-        spot: Mera objesi.
-        weather: WeatherData.
-        solunar_data: Solunar verisi.
-        rules: Validated rules listesi.
-        now: Mevcut zaman.
-        report_signals: Son 24h rapor sinyalleri.
-
-    Returns:
-        {speciesScores: {species_id: score_data}, overallScore, noGo, activeRules}
+    v1.3: Accepts scoring_config, seasonality_config, daylight_data, water_mass_proxy.
+    v1.3.1: trace_level param for debugging.
     """
-    # Build context and evaluate rules
-    context = build_rule_context(weather, spot, solunar_data, now)
-    rule_result = evaluate_rules(rules, context, TIER1_SPECIES)
+    # Build context with v1.3 fields
+    context = build_rule_context(
+        weather, spot, solunar_data, now,
+        daylight_data=daylight_data,
+        water_mass_proxy=water_mass_proxy,
+    )
+    rule_result = evaluate_rules(
+        rules, context, TIER1_SPECIES,
+        scoring_config=scoring_config,
+    )
 
     shore_str = spot.shore.value if hasattr(spot.shore, 'value') else spot.shore
     has_reports = report_signals is not None and report_signals.get("totalReports", 0) > 0
+    coord_accuracy = spot.accuracy.value if hasattr(spot.accuracy, 'value') else spot.accuracy
+
+    # Pressure config for mode derivation
+    pressure_config = None
+    if scoring_config and "pressureThresholds" in scoring_config:
+        pressure_config = scoring_config["pressureThresholds"]
 
     species_scores: dict[str, dict[str, Any]] = {}
     score_sum = 0
@@ -158,10 +159,17 @@ def compute_spot_scores(
             minute=now.minute,
             data_quality=weather.data_quality,
             has_reports_24h=has_reports,
+            scoring_config=scoring_config,
+            seasonality_config=seasonality_config,
+            coord_accuracy=coord_accuracy,
+            fired_rules_count=rule_result.fired_rules_count,
         )
 
         # Mode derivation
-        mode = derive_mode(sp_id, weather, solunar_data, spot, report_signals)
+        mode = derive_mode(
+            sp_id, weather, solunar_data, spot, report_signals,
+            pressure_config=pressure_config,
+        )
 
         # Override mode with rule modeHint (if any)
         if sp_id in rule_result.mode_hints:
@@ -171,14 +179,10 @@ def compute_spot_scores(
         recommended_techniques: list[dict[str, Any]] = []
         avoid_techniques: list[dict[str, Any]] = []
 
-        # Get rule-based technique hints
         rule_hints = rule_result.technique_hints.get(sp_id, [])
         rule_removes = rule_result.remove_techniques.get(sp_id, [])
-
-        # Mode-based avoidTechniques
         mode_avoids = MODE_AVOID_TECHNIQUES.get(mode, [])
 
-        # Build recommended list
         if rule_hints:
             for tech_id in rule_hints:
                 if tech_id not in rule_removes and tech_id not in mode_avoids:
@@ -188,7 +192,6 @@ def compute_spot_scores(
                         "setupHintTR": None,
                     })
 
-        # Build avoid list from mode + rules
         all_avoids = set(mode_avoids) | set(rule_removes)
         for tech_id in all_avoids:
             reason = "Mod pasif — bu teknik etkisiz" if mode == "holding" else \
@@ -212,7 +215,7 @@ def compute_spot_scores(
             "breakdown": score_data.get("breakdown"),
         }
 
-        if score_data["seasonStatus"] != "closed":
+        if score_data["seasonStatus"] != "off":
             score_sum += score_data["score"]
             score_count += 1
 
@@ -220,7 +223,29 @@ def compute_spot_scores(
     if rule_result.is_no_go:
         overall_score = 0
 
-    return {
+    # Build trace based on trace_level
+    trace: Optional[dict[str, Any]] = None
+    dq_val = weather.data_quality.value if hasattr(weather.data_quality, 'value') else weather.data_quality
+    if trace_level == "minimal":
+        trace = {
+            "firedRulesCount": rule_result.fired_rules_count,
+            "activeRuleIds": [r["ruleId"] for r in rule_result.active_rules],
+            "dataQuality": dq_val,
+        }
+    elif trace_level == "full":
+        trace = {
+            "firedRulesCount": rule_result.fired_rules_count,
+            "activeRuleIds": [r["ruleId"] for r in rule_result.active_rules],
+            "dataQuality": dq_val,
+            "categoryRawBonuses": rule_result.category_raw_bonuses,
+            "categoryCappedBonuses": rule_result.category_capped_bonuses,
+            "positiveTotalRaw": rule_result.positive_total_raw,
+            "positiveTotalCapped": rule_result.positive_total_capped,
+            "negativeTotal": rule_result.negative_total,
+            "finalRuleBonus": rule_result.final_rule_bonus,
+        }
+
+    result_dict: dict[str, Any] = {
         "speciesScores": species_scores,
         "overallScore": overall_score,
         "noGo": {
@@ -228,6 +253,93 @@ def compute_spot_scores(
             "reasonsTR": rule_result.no_go_reasons_tr,
         },
         "activeRules": rule_result.active_rules,
+    }
+    if trace is not None:
+        result_dict["trace"] = trace
+
+    return result_dict
+
+
+def _compute_sheltered_exceptions(
+    spots: list[SpotOut],
+    wind_cardinal: str,
+    scoring_config: Optional[dict[str, Any]] = None,
+) -> list[dict[str, Any]]:
+    """Compute sheltered exceptions for spots during noGo.
+
+    If global noGo=true, check each spot's shelteredFrom. If wind cardinal
+    (normalized) is in shelteredFrom → exception with LRF only + severe warning.
+    """
+    if scoring_config is None:
+        return []
+
+    sheltered_cfg = scoring_config.get("shelteredExceptions", {})
+    allowed_techniques = sheltered_cfg.get("allowedTechniques", ["lrf"])
+    warning_level = sheltered_cfg.get("warningLevel", "severe")
+
+    norm = normalize_cardinal_8(wind_cardinal)
+    exceptions: list[dict[str, Any]] = []
+
+    for spot in spots:
+        sheltered_from = getattr(spot, "sheltered_from", None) or []
+        if norm in sheltered_from:
+            exceptions.append({
+                "spotId": spot.id,
+                "spotNameTR": spot.name,
+                "allowedTechniques": allowed_techniques,
+                "warningLevel": warning_level,
+                "messageTR": f"{spot.name} korunaklı — sadece {'/'.join(t.upper() for t in allowed_techniques)} ile dikkatli av.",
+            })
+
+    return exceptions
+
+
+def _compute_health_block(weather: WeatherData) -> dict[str, Any]:
+    """Compute data health block for decision response.
+
+    Status: "good" | "degraded" | "bad" based on data quality and missing fields.
+    v1.3.2: reasonsCode (machine codes) + reasonsTR (Turkish text) + reasons alias.
+    """
+    reasons_code: list[str] = []
+    reasons_tr: list[str] = list(weather.data_issues)
+    status = "good"
+    dq = weather.data_quality.value if hasattr(weather.data_quality, 'value') else weather.data_quality
+
+    if dq == "fallback":
+        status = "bad"
+        reasons_code.append("data_quality_fallback")
+    elif dq == "cached":
+        status = "degraded"
+        reasons_code.append("data_quality_cached")
+
+    for _ in weather.data_issues:
+        reasons_code.append("provider_issue")
+
+    if weather.sea_temp_c is None:
+        status = "bad"
+        reasons_code.append("missing_sea_temp")
+        reasons_tr.append("Su sıcaklığı verisi yok")
+
+    if weather.wave_height_m is None and status == "good":
+        status = "degraded"
+        reasons_code.append("missing_wave_height")
+        reasons_tr.append("Dalga yüksekliği verisi yok")
+
+    cardinal = weather.wind_direction_cardinal if hasattr(weather, 'wind_direction_cardinal') else "N"
+    trend = weather.pressure_trend.value if hasattr(weather.pressure_trend, 'value') else weather.pressure_trend
+
+    normalized = {
+        "windSpeedKmhRaw": round(weather.wind_speed_kmh, 1),
+        "windCardinalDerived": cardinal,
+        "pressureTrendDerived": trend,
+    }
+
+    return {
+        "status": status,
+        "reasonsCode": reasons_code,
+        "reasonsTR": reasons_tr,
+        "reasons": reasons_tr,
+        "normalized": normalized,
     }
 
 
@@ -238,32 +350,43 @@ def generate_decision(
     rules: list[dict[str, Any]],
     now: Optional[datetime] = None,
     report_signals_map: Optional[dict[str, dict[str, Any]]] = None,
+    scoring_config: Optional[dict[str, Any]] = None,
+    seasonality_config: Optional[dict[str, Any]] = None,
+    trace_level: str = "none",
 ) -> dict[str, Any]:
-    """Decision Output v1 üretir.
+    """Decision Output v1.3.2.
 
-    Args:
-        spots: 16 mera listesi.
-        weather: WeatherData.
-        solunar_data: Solunar verisi.
-        rules: Validated rules listesi.
-        now: Mevcut zaman.
-        report_signals_map: {spotId: reportSignals} dict.
-
-    Returns:
-        DecisionResponse dict (API_CONTRACTS.md § GET /decision/today).
+    v1.3: Config-injected, sheltered exceptions, water mass proxy, daylight.
+    v1.3.1: Health block, trace support, SeasonStatus "off".
+    v1.3.2: reasonsCode, trace guard, telemetry.
     """
+    t0 = time.monotonic()
+
     if now is None:
         now = datetime.now()
 
     if report_signals_map is None:
         report_signals_map = {}
 
+    # Compute once per decision
+    daylight_data = compute_daylight(now)
+    water_mass_proxy = compute_water_mass_proxy(
+        weather.wind_direction_cardinal,
+        weather.wind_speed_kmh,
+        scoring_config,
+    )
+
     # Compute scores for all spots
     spot_results: dict[str, dict[str, Any]] = {}
     for spot in spots:
         signals = report_signals_map.get(spot.id)
         spot_results[spot.id] = compute_spot_scores(
-            spot, weather, solunar_data, rules, now, signals
+            spot, weather, solunar_data, rules, now, signals,
+            scoring_config=scoring_config,
+            seasonality_config=seasonality_config,
+            daylight_data=daylight_data,
+            water_mass_proxy=water_mass_proxy,
+            trace_level=trace_level,
         )
 
     # Best windows
@@ -278,10 +401,16 @@ def generate_decision(
                 if reason not in global_no_go_reasons:
                     global_no_go_reasons.append(reason)
 
+    # Sheltered exceptions (only computed when noGo is active)
+    sheltered_exceptions: list[dict[str, Any]] = []
+    if global_no_go:
+        sheltered_exceptions = _compute_sheltered_exceptions(
+            spots, weather.wind_direction_cardinal, scoring_config
+        )
+
     # Region decisions
     regions_output: list[dict[str, Any]] = []
     region_ids = ["avrupa", "anadolu", "city_belt"]
-    spot_by_id = {s.id: s for s in spots}
 
     for region_id in region_ids:
         region_spots = [s for s in spots if (s.region_id.value if hasattr(s.region_id, 'value') else s.region_id) == region_id]
@@ -289,7 +418,6 @@ def generate_decision(
         if not region_spots:
             continue
 
-        # Select best spot (highest overall, not noGo)
         best_spot = max(
             region_spots,
             key=lambda s: spot_results[s.id]["overallScore"] if not spot_results[s.id]["noGo"]["isNoGo"] else -1,
@@ -298,22 +426,20 @@ def generate_decision(
         result = spot_results[best_spot.id]
         species_scores = result["speciesScores"]
 
-        # Top targets (score DESC, max 4)
         sorted_species = sorted(
             [
                 (sp_id, data)
                 for sp_id, data in species_scores.items()
-                if data["seasonStatus"] != "closed"
+                if data["seasonStatus"] != "off"
             ],
             key=lambda x: (-x[1]["score"], x[0]),
         )[:4]
 
         targets: list[dict[str, Any]] = []
         for sp_id, sp_data in sorted_species:
-            # Find best window index
             best_window_idx: Optional[int] = None
             if best_windows:
-                best_window_idx = 0  # default to highest scored window
+                best_window_idx = 0
 
             targets.append({
                 "speciesId": sp_id,
@@ -324,7 +450,6 @@ def generate_decision(
                 "bestWindowIndex": best_window_idx,
             })
 
-        # Recommended techniques (from top species)
         recommended_techniques: list[dict[str, Any]] = []
         seen_techniques: set[str] = set()
         for _, sp_data in sorted_species:
@@ -334,7 +459,6 @@ def generate_decision(
                     seen_techniques.add(tid)
                     recommended_techniques.append(tech)
 
-        # If no rule-based techniques, use spot's primary techniques
         if not recommended_techniques:
             for tech_id in (best_spot.technique_bias or best_spot.primary_techniques)[:3]:
                 tid = tech_id.value if hasattr(tech_id, 'value') else tech_id
@@ -346,7 +470,6 @@ def generate_decision(
                         "setupHintTR": None,
                     })
 
-        # Avoid techniques (union from all species)
         avoid_techniques: list[dict[str, Any]] = []
         seen_avoid: set[str] = set()
         for _, sp_data in sorted_species:
@@ -356,22 +479,17 @@ def generate_decision(
                     seen_avoid.add(tid)
                     avoid_techniques.append(tech)
 
-        # whyTR: 2-3 Türkçe bullet
         why_tr: list[str] = []
-        # Add active rule messages
         for rule_info in result["activeRules"][:2]:
             if rule_info["messageTR"] and rule_info["messageTR"] not in why_tr:
                 why_tr.append(rule_info["messageTR"])
-        # Add generic condition info
         if best_spot.pelagic_corridor:
             why_tr.append("Pelajik koridorda — göçmen türler geçişte")
         if weather.wind_speed_kmh <= 15:
-            cardinal = weather.wind_direction_cardinal
             tr_name = weather.wind_direction_tr
             why_tr.append(f"{tr_name.capitalize()} hafif — uygun koşullar")
         why_tr = why_tr[:3]
 
-        # Report signals
         spot_signals = report_signals_map.get(best_spot.id)
 
         regions_output.append({
@@ -379,8 +497,8 @@ def generate_decision(
             "recommendedSpot": {
                 "spotId": best_spot.id,
                 "nameTR": best_spot.name,
-                "spotWindBandKmhMin": max(0, weather.wind_speed_kmh - 5),
-                "spotWindBandKmhMax": weather.wind_speed_kmh + 10,
+                "spotWindBandKmhMin": round(max(0, weather.wind_speed_kmh - 5)),
+                "spotWindBandKmhMax": round(weather.wind_speed_kmh + 10),
                 "whyTR": why_tr,
                 "targets": targets,
                 "recommendedTechniques": recommended_techniques[:3],
@@ -391,15 +509,15 @@ def generate_decision(
 
     # Day summary
     day_summary = {
-        "windSpeedKmhMin": max(0, weather.wind_speed_kmh - 3),
-        "windSpeedKmhMax": weather.wind_speed_kmh + 5,
+        "windSpeedKmhMin": round(max(0, weather.wind_speed_kmh - 3)),
+        "windSpeedKmhMax": round(weather.wind_speed_kmh + 5),
         "windDirDeg": weather.wind_dir_deg,
         "windDirectionTR": weather.wind_direction_tr,
         "pressureHpa": weather.pressure_hpa,
         "pressureChange3hHpa": weather.pressure_change_3h_hpa,
         "pressureTrend": weather.pressure_trend.value,
-        "airTempCMin": weather.air_temp_c - 3,
-        "airTempCMax": weather.air_temp_c + 3,
+        "airTempCMin": round(weather.air_temp_c - 3),
+        "airTempCMax": round(weather.air_temp_c + 3),
         "seaTempC": weather.sea_temp_c,
         "cloudCoverPct": weather.cloud_cover_pct,
         "waveHeightM": weather.wave_height_m,
@@ -407,9 +525,12 @@ def generate_decision(
         "dataIssues": weather.data_issues,
     }
 
-    return {
+    # Health block (always present)
+    health = _compute_health_block(weather)
+
+    decision = {
         "meta": {
-            "contractVersion": "1.2",
+            "contractVersion": "1.3",
             "generatedAt": datetime.now(tz=timezone.utc).isoformat(),
             "timezone": "Europe/Istanbul",
         },
@@ -419,5 +540,13 @@ def generate_decision(
         "noGo": {
             "isNoGo": global_no_go,
             "reasonsTR": global_no_go_reasons,
+            "shelteredExceptions": sheltered_exceptions,
         },
+        "health": health,
     }
+
+    # Telemetry (v1.3.2)
+    latency_ms = round((time.monotonic() - t0) * 1000, 1)
+    log_decision_event(decision, latency_ms)
+
+    return decision

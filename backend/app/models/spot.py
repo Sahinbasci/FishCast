@@ -62,3 +62,22 @@ class SpotOut(BaseModel):
     wind_exposure: WindExposure = Field(alias="windExposure")
     special_rules: list[str] = Field(alias="specialRules")
     description: Optional[str] = None
+    # v1.3 hardening — Optional fields with safe defaults
+    technique_suitability: Optional[dict[str, float]] = Field(
+        default=None, alias="techniqueSuitability"
+    )
+    wind_limits_by_technique: Optional[dict[str, float]] = Field(
+        default=None, alias="windLimitsByTechnique"
+    )
+    corridor_potential: Optional[float] = Field(
+        default=None, alias="corridorPotential"
+    )
+    sheltered_from: Optional[list[str]] = Field(
+        default=None, alias="shelteredFrom"
+    )
+    wind_exposure_map: Optional[dict[str, str]] = Field(
+        default=None, alias="windExposureMap"
+    )
+    seasonal_hints: Optional[dict[str, dict]] = Field(
+        default=None, alias="seasonalHints"
+    )

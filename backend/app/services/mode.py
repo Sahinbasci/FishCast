@@ -18,6 +18,7 @@ def derive_mode(
     solunar_data: dict[str, Any],
     spot: Any,
     report_signals: Optional[dict[str, Any]] = None,
+    pressure_config: Optional[dict[str, Any]] = None,
 ) -> str:
     """Tür davranış modunu derive eder.
 
@@ -47,11 +48,25 @@ def derive_mode(
         if species_id in ("cinekop", "sarikanat", "lufer"):
             return "selective"
 
-    # P2: Extreme conditions → holding
+    # P2: Extreme conditions → holding (config-driven thresholds)
+    extreme_change = 3.0
+    rapid_falling = -2.5
+    rapid_rising = 2.5
+    if pressure_config:
+        extreme_change = pressure_config.get("extremeChangeThreshold", 3.0)
+        rapid_falling = pressure_config.get("rapidFallingThreshold", -2.5)
+        rapid_rising = pressure_config.get("rapidRisingThreshold", 2.5)
+
     if weather.wind_speed_kmh > 25:
         return "holding"
-    if abs(weather.pressure_change_3h_hpa) > 3:
+    if abs(weather.pressure_change_3h_hpa) > extreme_change:
         return "holding"
+
+    # Rapid pressure changes override mode
+    if weather.pressure_change_3h_hpa < rapid_falling:
+        return "chasing"  # feeding frenzy
+    if weather.pressure_change_3h_hpa > rapid_rising:
+        return "holding"  # fish go deep
 
     # P3: Onshore wind check (species sensitive to exposure)
     try:

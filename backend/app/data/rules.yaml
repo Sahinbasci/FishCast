@@ -1,6 +1,6 @@
-# FishCast Rule Engine — 24 Rules
-# Source: SCORING_ENGINE.md § 24 Rules
-# Format: YYYYMMDD.N — rulesetVersion: 20260219.1
+# FishCast Rule Engine — 33 Rules
+# Source: SCORING_ENGINE.md § Rules + v1.3 hardening additions
+# Format: YYYYMMDD.N — rulesetVersion: 20260222.1
 
 # === ABSOLUTE (Priority 10) ===
 - id: "nogo_extreme_wind"
@@ -12,6 +12,7 @@
       noGo: true
   messageTR: "DİKKAT: 35+ km/h — kıyıdan avlanılamaz!"
   priority: 10
+  category: "absolute"
 
 - id: "karagoz_never_spin"
   condition:
@@ -22,6 +23,7 @@
       removeFromTechniques: ["spin"]
   messageTR: "Karagöz spin ile tutulmaz — LRF/yemli dip dene."
   priority: 10
+  category: "absolute"
 
 # === WIND + SHORE (Priority 9) ===
 - id: "poyraz_anatolian_penalty"
@@ -34,6 +36,7 @@
       scoreBonus: -15
   messageTR: "Kuvvetli poyraz — Anadolu yakası dalgalı."
   priority: 9
+  category: "windCoast"
 
 - id: "poyraz_european_bonus"
   condition:
@@ -45,6 +48,7 @@
       scoreBonus: 8
   messageTR: "Poyraz — Avrupa yakası korunaklı."
   priority: 9
+  category: "windCoast"
 
 - id: "lodos_european_penalty"
   condition:
@@ -56,6 +60,7 @@
       scoreBonus: -15
   messageTR: "Lodos — Avrupa yakası bulanık."
   priority: 9
+  category: "windCoast"
 
 - id: "lodos_anatolian_bonus"
   condition:
@@ -67,6 +72,7 @@
       scoreBonus: 5
   messageTR: "Lodos — Anadolu yakası sakin."
   priority: 9
+  category: "windCoast"
 
 # === WEATHER + MODE (Priority 7-8) ===
 - id: "pressure_drop_evening"
@@ -78,6 +84,7 @@
       scoreBonus: 15
   messageTR: "Basınç düşüşü + akşam = av patlaması!"
   priority: 8
+  category: "weatherMode"
 
 - id: "cinekop_selective_day"
   condition:
@@ -90,6 +97,7 @@
       removeFromTechniques: ["spin"]
   messageTR: "Basınç düşüşü — çinekop seçici, doğal yem tercih et."
   priority: 7
+  category: "weatherMode"
 
 - id: "cinekop_bait_fallback"
   condition:
@@ -102,6 +110,7 @@
       modeHint: "selective"
   messageTR: "Soğuk su — çinekop/sarıkanat yeme geç."
   priority: 7
+  category: "weatherMode"
 
 - id: "post_poyraz_migration"
   condition:
@@ -111,6 +120,7 @@
       scoreBonus: 10
   messageTR: "Poyraz sonrası göç — palamut/çinekop giriyor!"
   priority: 7
+  category: "weatherMode"
 
 - id: "lodos_sarayburnu_palamut"
   condition:
@@ -123,7 +133,9 @@
       modeHint: "chasing"
   messageTR: "Sarayburnu lodos = palamut patlar!"
   priority: 7
+  category: "istanbul"
 
+# === ISTANBUL-SPECIFIC (Priority 5-6) ===
 - id: "after_rain_bonus"
   condition:
     after_rain: true
@@ -135,6 +147,7 @@
       scoreBonus: 8
   messageTR: "Yağmur sonrası — levrek/karagöz aktif!"
   priority: 6
+  category: "istanbul"
 
 - id: "full_moon_night_levrek"
   condition:
@@ -146,6 +159,7 @@
       techniqueHints: ["shore_jig", "yemli_dip"]
   messageTR: "Dolunay gecesi — levrek altın saati!"
   priority: 6
+  category: "istanbul"
 
 - id: "kandilli_lufer_center"
   condition:
@@ -157,61 +171,8 @@
       techniqueHints: ["spin", "kursun_arkasi"]
   messageTR: "Kandilli lüfer merkezi."
   priority: 6
+  category: "istanbul"
 
-# === TIME + TECHNIQUE (Priority 4-5) ===
-- id: "night_lrf_golden"
-  condition:
-    time: "20:00-00:00"
-    windSpeedKmh_range: [3, 8]
-  effects:
-    - applyToSpecies: ["istavrit", "karagoz", "mirmir"]
-      scoreBonus: 0
-      techniqueHints: ["lrf"]
-  messageTR: "LRF altın saati!"
-  priority: 5
-
-- id: "bebek_night_levrek"
-  condition:
-    spot: "bebek"
-    time: "20:00-05:00"
-  effects:
-    - applyToSpecies: ["levrek"]
-      scoreBonus: 12
-      techniqueHints: ["shore_jig", "lrf", "yemli_dip"]
-  messageTR: "Bebek gece levrek merkezi."
-  priority: 5
-
-- id: "cold_water_deep_istavrit"
-  condition:
-    seaTempC: "<10"
-    month: [12, 1, 2, 3]
-  effects:
-    - applyToSpecies: ["istavrit"]
-      scoreBonus: -10
-      techniqueHints: ["capari"]
-  messageTR: "Soğuk su — istavrit derine indi, ağır çapari."
-  priority: 5
-
-- id: "spin_morning_wtd"
-  condition:
-    time: "05:00-07:00"
-  effects:
-    - applyToSpecies: ["lufer", "palamut"]
-      scoreBonus: 0
-      techniqueHints: ["spin"]
-  messageTR: "WTD surface lure — sabah yüzeyde avlanırlar."
-  priority: 4
-
-- id: "strong_current_warning"
-  condition:
-    current_speed: ">=4"
-  effects:
-    - applyToSpecies: ["*"]
-      scoreBonus: 0
-  messageTR: "Akıntı güçlü — sinker artır."
-  priority: 4
-
-# === ISTANBUL-SPECIFIC (Priority 5-6) ===
 - id: "pelagic_corridor_chasing"
   condition:
     pelagicCorridor: true
@@ -222,18 +183,7 @@
       modeHint: "chasing"
   messageTR: "Pelajik koridor aktif — göçmen türler geçiyor!"
   priority: 6
-
-- id: "city_belt_istavrit_sunset"
-  condition:
-    regionId: "city_belt"
-    time: "16:00-19:00"
-  effects:
-    - applyToSpecies: ["istavrit"]
-      scoreBonus: 10
-      techniqueHints: ["capari", "yemli_dip"]
-      modeHint: "chasing"
-  messageTR: "Şehir hattı akşam üstü — çapari ile istavrit garantili!"
-  priority: 5
+  category: "istanbul"
 
 - id: "levrek_onshore_wind_bonus"
   condition:
@@ -246,6 +196,57 @@
       modeHint: "chasing"
   messageTR: "Kıyıya vuran lodos = levrek aktifleşir."
   priority: 6
+  category: "istanbul"
+
+# === TIME + TECHNIQUE (Priority 4-5) ===
+- id: "night_lrf_golden"
+  condition:
+    time: "20:00-00:00"
+    windSpeedKmh_range: [3, 8]
+  effects:
+    - applyToSpecies: ["istavrit", "karagoz", "mirmir"]
+      scoreBonus: 0
+      techniqueHints: ["lrf"]
+  messageTR: "LRF altın saati!"
+  priority: 5
+  category: "techniqueTime"
+
+- id: "bebek_night_levrek"
+  condition:
+    spot: "bebek"
+    time: "20:00-05:00"
+  effects:
+    - applyToSpecies: ["levrek"]
+      scoreBonus: 12
+      techniqueHints: ["shore_jig", "lrf", "yemli_dip"]
+  messageTR: "Bebek gece levrek merkezi."
+  priority: 5
+  category: "istanbul"
+
+- id: "cold_water_deep_istavrit"
+  condition:
+    seaTempC: "<10"
+    month: [12, 1, 2, 3]
+  effects:
+    - applyToSpecies: ["istavrit"]
+      scoreBonus: -10
+      techniqueHints: ["capari"]
+  messageTR: "Soğuk su — istavrit derine indi, ağır çapari."
+  priority: 5
+  category: "techniqueTime"
+
+- id: "city_belt_istavrit_sunset"
+  condition:
+    regionId: "city_belt"
+    time: "16:00-19:00"
+  effects:
+    - applyToSpecies: ["istavrit"]
+      scoreBonus: 10
+      techniqueHints: ["capari", "yemli_dip"]
+      modeHint: "chasing"
+  messageTR: "Şehir hattı akşam üstü — çapari ile istavrit garantili!"
+  priority: 5
+  category: "istanbul"
 
 - id: "wind_safety_band_warning"
   condition:
@@ -255,6 +256,7 @@
       scoreBonus: 0
   messageTR: "Rüzgar güçlü — mera seçiminde rüzgara korunaklı noktaları tercih et."
   priority: 5
+  category: "windCoast"
 
 - id: "night_rocky_karagoz"
   condition:
@@ -267,3 +269,118 @@
       removeFromTechniques: ["spin", "capari", "shore_jig"]
   messageTR: "Gece kayalık — karagöz LRF/yemli dip ile, spin/çapari kaçın."
   priority: 5
+  category: "techniqueTime"
+
+- id: "spin_morning_wtd"
+  condition:
+    time: "05:00-07:00"
+  effects:
+    - applyToSpecies: ["lufer", "palamut"]
+      scoreBonus: 0
+      techniqueHints: ["spin"]
+  messageTR: "WTD surface lure — sabah yüzeyde avlanırlar."
+  priority: 4
+  category: "techniqueTime"
+
+- id: "strong_current_warning"
+  condition:
+    current_speed: ">=4"
+  effects:
+    - applyToSpecies: ["*"]
+      scoreBonus: 0
+  messageTR: "Akıntı güçlü — sinker artır."
+  priority: 4
+  category: "techniqueTime"
+
+# === v1.3 NEW RULES ===
+
+# Water mass proxy: Lodos → warm water → palamut bonus
+- id: "lodos_palamut_water_boost"
+  condition:
+    waterMassProxy: "lodos"
+    windSpeedKmh: ">=10"
+  effects:
+    - applyToSpecies: ["palamut"]
+      scoreBonus: 10
+      modeHint: "chasing"
+  messageTR: "Lodos sıcak su itiyor — palamut aktif!"
+  priority: 7
+  category: "weatherMode"
+
+# Water mass proxy: Lodos → warm water → bluefish penalty
+- id: "lodos_bluefish_water_penalty"
+  condition:
+    waterMassProxy: "lodos"
+    windSpeedKmh: ">=10"
+  effects:
+    - applyToSpecies: ["cinekop", "sarikanat", "lufer"]
+      scoreBonus: -8
+  messageTR: "Lodos sıcak su — lüfer ailesi pasifleşir."
+  priority: 7
+  category: "weatherMode"
+
+# Water mass proxy: Poyraz → cold water → bluefish boost
+- id: "poyraz_bluefish_water_boost"
+  condition:
+    waterMassProxy: "poyraz"
+    windSpeedKmh: ">=10"
+  effects:
+    - applyToSpecies: ["cinekop", "sarikanat", "lufer"]
+      scoreBonus: 10
+      modeHint: "chasing"
+  messageTR: "Poyraz soğuk su — lüfer ailesi aktif!"
+  priority: 7
+  category: "weatherMode"
+
+# Water mass proxy: Poyraz → cold water → palamut penalty
+- id: "poyraz_palamut_water_penalty"
+  condition:
+    waterMassProxy: "poyraz"
+    windSpeedKmh: ">=10"
+  effects:
+    - applyToSpecies: ["palamut"]
+      scoreBonus: -5
+  messageTR: "Poyraz soğuk su — palamut dibe iner."
+  priority: 7
+  category: "weatherMode"
+
+# Pressure falling aggressively → chasing mode
+- id: "pressure_falling_aggressive"
+  condition:
+    pressureChange3hHpa: "<-1.5"
+    pressureTrend: "falling"
+  effects:
+    - applyToSpecies: ["lufer", "palamut"]
+      scoreBonus: 8
+      modeHint: "chasing"
+      techniqueHints: ["spin", "kursun_arkasi"]
+  messageTR: "Basınç hızla düşüyor — agresif av zamanı!"
+  priority: 7
+  category: "weatherMode"
+
+# Pressure rising → passive/holding mode
+- id: "pressure_rising_passive"
+  condition:
+    pressureChange3hHpa: ">1.5"
+    pressureTrend: "rising"
+  effects:
+    - applyToSpecies: ["*"]
+      scoreBonus: -5
+      modeHint: "holding"
+      techniqueHints: ["yemli_dip"]
+  messageTR: "Basınç yükseliyor — balık dibe iner, yemli dip tercih et."
+  priority: 7
+  category: "weatherMode"
+
+# Summer low wind → LRF paradise
+- id: "summer_low_wind_lrf"
+  condition:
+    month: [6, 7, 8]
+    windSpeedKmh_range: [0, 10]
+  effects:
+    - applyToSpecies: ["istavrit", "karagoz", "mirmir"]
+      scoreBonus: 5
+      techniqueHints: ["lrf"]
+  messageTR: "Yaz sakin — LRF ile istavrit/karagöz/mırmır sezonu!"
+  priority: 5
+  category: "techniqueTime"

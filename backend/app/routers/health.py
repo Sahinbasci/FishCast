@@ -49,6 +49,6 @@ async def health_check() -> HealthResponse:
     return HealthResponse(
         status="ok",
         engine_version="1.0.0",
-        ruleset_version="20260219.1",
-        rules_count=24,
+        ruleset_version="20260222.2",
+        rules_count=31,
     )

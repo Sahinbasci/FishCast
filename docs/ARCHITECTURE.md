@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — FishCast Teknik Mimari
 
-> Contract Version: 1.2 | 2026-02-19
+> Contract Version: 1.3 | 2026-02-22
 
 ## Sistem Diagramı
 ```
@@ -205,6 +205,26 @@
 
 > Tüm koordinatlar `accuracy:"approx"`. Production öncesi GPS ile doğrulanmalı.
 
+#### v1.3 Optional Spot Fields
+Spots may include these additional fields (all Optional with safe defaults in code):
+```json
+{
+  "techniqueSuitability": {"lrf": 0.8, "yemli_dip": 0.9},
+  "windLimitsByTechnique": {"lrf": 15, "spin": 25},
+  "corridorPotential": 0.7,
+  "shelteredFrom": ["NE", "N"],
+  "windExposureMap": {"NE": "favorable", "SW": "hostile"},
+  "seasonalHints": {"palamut": {"peakMonths": [8,9,10], "strength": 0.9}}
+}
+```
+Code handles missing fields via `Optional[...] = None` defaults.
+
+### Config Loading (v1.3)
+At startup, `main.py` lifespan loads:
+- `scoring_config.yaml` → `app.state.scoring_config` (weights, temps, caps, thresholds)
+- `seasonality.yaml` → `app.state.seasonality_config` (per-species season data)
+- Validation: all species keys must exist in `SpeciesId` enum, else fail-fast
+
 ### Collection: `scores`
 Path: `scores/{YYYY-MM-DD}/{spotId}`
 
@@ -212,7 +232,7 @@ Path: `scores/{YYYY-MM-DD}/{spotId}`
 {
   "spotId": "bebek",
   "date": "2026-02-19",
-  "meta": {"contractVersion":"1.2","generatedAt":"2026-02-19T06:00:00Z","timezone":"Europe/Istanbul"},
+  "meta": {"contractVersion":"1.3","generatedAt":"2026-02-22T06:00:00Z","timezone":"Europe/Istanbul"},
   "overallScore": 72,
   "noGo": {"isNoGo": false, "reasonsTR": []},
   "weather": {
@@ -237,7 +257,7 @@ Path: `scores/{YYYY-MM-DD}/{spotId}`
       "confidence0to1": 0.78, "seasonStatus": "peak", "mode": "selective",
       "recommendedTechniques": ["kursun_arkasi","yemli_dip"],
       "avoidTechniques": ["spin"],
-      "breakdown": {"pressure":0.85,"wind":0.90,"seaTemp":0.50,"solunar":0.70,"time":0.40,"seasonMultiplier":1.2,"rulesBonus":15}
+      "breakdown": {"pressure":0.85,"wind":0.90,"seaTemp":0.50,"solunar":0.70,"time":0.40,"seasonMultiplier":1.0,"seasonAdjustment":15,"rulesBonus":15}
     }
   },
   "activeRules": [{"ruleId":"bebek_night_levrek","appliedBonus":12,"affectedSpecies":["levrek"],"messageTR":"Bebek gece levrek merkezi."}]
@@ -273,7 +293,7 @@ type SpeciesMode = "chasing"|"selective"|"holding"
 type DataQuality = "live"|"cached"|"fallback"
 type PressureTrend = "falling"|"rising"|"stable"
 type DataSourceStatus = "ok"|"cached"|"fallback"|"error"
-type SeasonStatus = "peak"|"active"|"closed"
+type SeasonStatus = "peak"|"shoulder"|"active"|"off"|"closed"  // "off" = off-season (v1.3.1), "closed" = legacy
 type CrowdRisk = "low"|"medium"|"high"
 type CoordAccuracy = "approx"|"verified"
 type WindCardinal = "N"|"NE"|"E"|"SE"|"S"|"SW"|"W"|"NW"

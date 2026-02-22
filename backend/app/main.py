@@ -14,6 +14,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
+import yaml
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,6 +24,7 @@ from app.models.species_model import SpeciesOut
 from app.models.technique import TechniqueOut
 from app.routers import decision, health, internal, reports, scores, species, spots, techniques
 from app.services.firebase import initialize_firebase
+from app.models.enums import SpeciesId
 from app.services.rules import load_and_validate_rules
 
 logger = logging.getLogger(__name__)
@@ -82,12 +85,37 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.rules = load_and_validate_rules()
     logger.info("Yüklendi: %d kural", len(app.state.rules))
 
+    # Scoring config (v1.3 — weights, temps, thresholds, caps)
+    with open(DATA_DIR / "scoring_config.yaml", encoding="utf-8") as f:
+        app.state.scoring_config = yaml.safe_load(f)
+    logger.info("Yüklendi: scoring_config.yaml")
+
+    # Seasonality config (v1.3 — additive season adjustments, parça behavior)
+    with open(DATA_DIR / "seasonality.yaml", encoding="utf-8") as f:
+        app.state.seasonality_config = yaml.safe_load(f)
+    # Validate: every species key must be a valid SpeciesId
+    valid_species = {e.value for e in SpeciesId}
+    for sp_key in app.state.seasonality_config.get("species", {}):
+        if sp_key not in valid_species:
+            raise SystemExit(
+                f"FATAL: seasonality.yaml has unknown species '{sp_key}'. "
+                f"Valid: {valid_species}"
+            )
+    logger.info(
+        "Yüklendi: seasonality.yaml (%d tür)",
+        len(app.state.seasonality_config.get("species", {})),
+    )
+
     # Stormglass API key
     app.state.stormglass_api_key = os.environ.get("STORMGLASS_API_KEY")
     if app.state.stormglass_api_key:
         logger.info("Stormglass API key bulundu")
     else:
         logger.warning("STORMGLASS_API_KEY env var yok — fallback kullanılacak")
+
+    # Trace guard: ALLOW_TRACE_FULL (default false — prod'da full trace kapalı)
+    app.state.allow_trace_full = os.getenv("ALLOW_TRACE_FULL", "false").lower() == "true"
+    logger.info("ALLOW_TRACE_FULL = %s", app.state.allow_trace_full)
 
     # Firebase (opsiyonel — yoksa da API çalışır)
     try:

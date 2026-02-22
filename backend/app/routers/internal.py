@@ -52,6 +52,10 @@ async def calculate_scores(request: Request) -> dict[str, Any]:
     weather = await get_weather(stormglass_api_key=stormglass_key)
     solunar_data = compute_solunar()
 
+    # v1.3: Pass configs for DI
+    scoring_config = getattr(request.app.state, "scoring_config", None)
+    seasonality_config = getattr(request.app.state, "seasonality_config", None)
+
     # Calculate scores for all spots
     spot_results: dict[str, dict[str, Any]] = {}
     for spot in spots:
@@ -61,6 +65,8 @@ async def calculate_scores(request: Request) -> dict[str, Any]:
             solunar_data=solunar_data,
             rules=rules,
             now=now,
+            scoring_config=scoring_config,
+            seasonality_config=seasonality_config,
         )
 
     # Write to Firestore
@@ -77,7 +83,7 @@ async def calculate_scores(request: Request) -> dict[str, Any]:
                     "spotId": spot.id,
                     "date": date_str,
                     "meta": {
-                        "contractVersion": "1.2",
+                        "contractVersion": "1.3",
                         "generatedAt": now.isoformat(),
                         "timezone": "Europe/Istanbul",
                     },
@@ -97,6 +103,8 @@ async def calculate_scores(request: Request) -> dict[str, Any]:
                 solunar_data=solunar_data,
                 rules=rules,
                 now=now,
+                scoring_config=scoring_config,
+                seasonality_config=seasonality_config,
             )
             db.collection("decisions").document(date_str).set(decision)
             firestore_written += 1

@@ -1,10 +1,37 @@
 # INSTRUCTIONS.md — FishCast Project
 
-> Contract Version: 1.2 | 2026-02-19
+> Contract Version: 1.3.2 | 2026-02-22
 
 ## Proje
 **FishCast** — Istanbul kıyı balıkçıları için veri temelli av karar destek sistemi.
 MVP: 3 hafta. Kural motoru balıkçı feedback'iyle agresif iterate edilecek.
+
+## Changelog v1.3.2 (2026-02-22)
+- **Health block reason codes**: `reasonsCode[]` (machine), `reasonsTR[]` (Turkish), `reasons` alias (backward compat).
+- **Trace guard**: `ALLOW_TRACE_FULL` env var gates `traceLevel=full` in production. Meta shows `traceLevelRequested`/`traceLevelApplied` when downgraded.
+- **Telemetry**: Structured JSON logging via `fishcast.telemetry` logger. Event: `decision_generated`.
+- **SeasonStatus UI config**: `SEASON_STATUS_CONFIG` in frontend constants.ts. SpeciesScore.tsx config-driven.
+- **Smoke script**: `backend/scripts/smoke_decision.py` — 4 offline scenarios.
+- **health.py fix**: `rulesCount` 24→31, `rulesetVersion` → `20260222.2`.
+- **Runbook**: `docs/RUNBOOK_PROD.md` — endpoints, health interpretation, troubleshooting, telemetry.
+- **Ruleset**: 20260222.2
+
+## Changelog v1.3 (2026-02-22)
+- **Additive season adjustment**: `seasonMultiplier` (multiplicative) → `seasonAdjustment` (additive). Off-season scores never zeroed.
+- **Backward compat**: `breakdown.seasonMultiplier` always 1.0 (deprecated), `breakdown.seasonAdjustment` is authoritative.
+- **Shoulder season**: New `"shoulder"` status in SeasonStatus enum.
+- **Parça ihtimali**: Off-season + favorable conditions → reduced penalty, `isParca: true`.
+- **Config injection (DI)**: All scoring/rules functions accept configs explicitly. `scoring_config.yaml` + `seasonality.yaml` loaded at startup.
+- **Rule category caps**: Explicit `category` field per rule. Per-category caps + totalCap=25 with trace data.
+- **7 new rules** (total 31): lodos/poyraz water mass effects, pressure falling/rising, summer LRF.
+- **Wind normalization**: Single canonical utility `app/utils/wind.py`. 16→8 cardinal mapping.
+- **Water mass proxy**: Lodos→warm Marmara, Poyraz→cold Black Sea. Config-driven thresholds.
+- **Daylight computation**: `compute_daylight()` via ephem, timezone-safe (`Europe/Istanbul`).
+- **Sheltered exceptions**: noGo + `shelteredExceptions[]` for sheltered spots (LRF-only, severe warning).
+- **Optional spot fields**: `techniqueSuitability`, `windExposureMap`, `shelteredFrom`, `corridorPotential`, `seasonalHints`.
+- **Confidence never 0.0**: Minimum 0.1, even off-season + fallback data.
+- **TIER1_SPECIES**: mirmir promoted to Tier 1 (6 species scored).
+- **Ruleset**: 20260222.1
 
 ## Changelog v1.2
 - Decision Output v1: `GET /decision/today` endpoint, canonical contract
@@ -104,7 +131,7 @@ CARDINAL_TO_TR = {
 
 ## MVP Tür Listesi
 
-### Tier 1 (5 tür — skorlanır + mode)
+### Tier 1 (6 tür — skorlanır + mode)
 | ID | Ad | Sezon |
 |----|----|-------|
 | `istavrit` | İstavrit | Yıl boyu (pik Eyl-Kas) |
@@ -112,9 +139,10 @@ CARDINAL_TO_TR = {
 | `sarikanat` | Sarıkanat | Eyl-Ara |
 | `palamut` | Palamut | Ağu-Kas |
 | `karagoz` | Karagöz | Yıl boyu |
+| `mirmir` | Mirmir | Yıl boyu (v1.3'te Tier 1'e terfi) |
 
 ### Tier 2 — v1.1
-`lufer`, `levrek`, `kolyoz`, `mirmir`
+`lufer`, `levrek`, `kolyoz`
 
 ## Teknikler (7)
 | ID | Ad |
@@ -161,6 +189,6 @@ CARDINAL_TO_TR = {
 
 ## Referanslar
 - `docs/ARCHITECTURE.md` — Firestore şeması, spot metadata, data source policy
-- `docs/SCORING_ENGINE.md` — Ağırlıklar, 24 kural, mode derivation, NO-GO authority
+- `docs/SCORING_ENGINE.md` — Ağırlıklar, 31 kural, mode derivation, NO-GO authority, category caps
 - `docs/API_CONTRACTS.md` — Decision Output v1, canonical types, MAP→ARRAY transform
 - `docs/TASKS.md` — 3 haftalık MVP + golden fixtures

@@ -11,11 +11,13 @@ import logging
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
 ISTANBUL_LAT = 41.01
 ISTANBUL_LNG = 28.98
+ISTANBUL_TZ = ZoneInfo("Europe/Istanbul")
 
 # Moon phase names
 MOON_PHASES = [
@@ -204,6 +206,96 @@ def compute_solunar(
     except Exception as e:
         logger.error("Solunar hesaplama hatası: %s", e)
         return _default_solunar()
+
+
+def compute_daylight(
+    date: Optional[datetime] = None,
+    lat: float = ISTANBUL_LAT,
+    lng: float = ISTANBUL_LNG,
+) -> dict[str, Any]:
+    """Compute sunrise/sunset and isDaylight for given date and location.
+
+    Uses ephem for accurate sun calculations with proper timezone handling
+    via zoneinfo.ZoneInfo("Europe/Istanbul").
+
+    Args:
+        date: Datetime for computation. None → now (UTC).
+        lat: Latitude.
+        lng: Longitude.
+
+    Returns:
+        {isDaylight: bool, sunriseLocal: "HH:MM", sunsetLocal: "HH:MM",
+         tz: "Europe/Istanbul"}
+    """
+    try:
+        import ephem
+    except ImportError:
+        logger.warning("ephem not available — using daylight fallback")
+        return _default_daylight(date)
+
+    if date is None:
+        date = datetime.now(tz=timezone.utc)
+
+    try:
+        observer = ephem.Observer()
+        observer.lat = str(lat)
+        observer.lon = str(lng)
+        observer.elevation = 0
+        # Use noon UTC for the given date to find today's rise/set
+        obs_date = date.replace(hour=0, minute=0, second=0, microsecond=0)
+        if obs_date.tzinfo is None:
+            obs_date = obs_date.replace(tzinfo=timezone.utc)
+        observer.date = ephem.Date(obs_date)
+
+        sun = ephem.Sun()
+
+        rise = observer.next_rising(sun)
+        rise_dt = ephem.Date(rise).datetime().replace(tzinfo=timezone.utc)
+        rise_local = rise_dt.astimezone(ISTANBUL_TZ)
+
+        sett = observer.next_setting(sun)
+        set_dt = ephem.Date(sett).datetime().replace(tzinfo=timezone.utc)
+        set_local = set_dt.astimezone(ISTANBUL_TZ)
+
+        # Determine isDaylight for the given time
+        now_local = date.astimezone(ISTANBUL_TZ) if date.tzinfo else date.replace(tzinfo=timezone.utc).astimezone(ISTANBUL_TZ)
+        now_minutes = now_local.hour * 60 + now_local.minute
+        rise_minutes = rise_local.hour * 60 + rise_local.minute
+        set_minutes = set_local.hour * 60 + set_local.minute
+
+        is_daylight = rise_minutes <= now_minutes <= set_minutes
+
+        return {
+            "isDaylight": is_daylight,
+            "sunriseLocal": _time_str(rise_local),
+            "sunsetLocal": _time_str(set_local),
+            "tz": "Europe/Istanbul",
+        }
+    except Exception as e:
+        logger.error("Daylight computation error: %s", e)
+        return _default_daylight(date)
+
+
+def _default_daylight(date: Optional[datetime] = None) -> dict[str, Any]:
+    """Fallback daylight data when ephem is unavailable.
+
+    Returns:
+        Default daylight dict with conservative sunrise=06:00, sunset=19:00.
+    """
+    is_daylight = True
+    if date is not None:
+        try:
+            local = date.astimezone(ISTANBUL_TZ) if date.tzinfo else date.replace(tzinfo=timezone.utc).astimezone(ISTANBUL_TZ)
+            is_daylight = 6 <= local.hour < 19
+        except Exception:
+            pass
+
+    return {
+        "isDaylight": is_daylight,
+        "sunriseLocal": "06:00",
+        "sunsetLocal": "19:00",
+        "tz": "Europe/Istanbul",
+    }
 
 
 def _default_solunar() -> dict[str, Any]:

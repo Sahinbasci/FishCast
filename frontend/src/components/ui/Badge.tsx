@@ -4,11 +4,16 @@ interface BadgeProps {
   bgColor?: string;
 }
 
-export default function Badge({ label, color = "#1E3A5F", bgColor = "#E0F2FE" }: BadgeProps) {
+export default function Badge({ label, color = "#3b82f6" }: BadgeProps) {
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-      style={{ color, backgroundColor: bgColor }}
+      className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-sm"
+      style={{
+        color,
+        backgroundColor: `${color}12`,
+        border: `1px solid ${color}20`,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+      }}
     >
       {label}
     </span>

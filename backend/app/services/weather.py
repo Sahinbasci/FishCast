@@ -18,6 +18,7 @@ from typing import Any, Optional
 import httpx
 
 from app.models.enums import DataQuality, PressureTrend, WindCardinal
+from app.utils.wind import degrees_to_cardinal_8
 
 logger = logging.getLogger(__name__)
 
@@ -48,13 +49,15 @@ CARDINAL_TO_TR: dict[str, str] = {
 def deg_to_cardinal(deg: float) -> str:
     """Derece cinsinden rüzgar yönünü 8-yön kardinale çevirir.
 
+    Delegates to canonical utils.wind.degrees_to_cardinal_8.
+
     Args:
         deg: Rüzgar yönü (0-359 derece).
 
     Returns:
         Kardinal yön string'i (N, NE, E, SE, S, SW, W, NW).
     """
-    return _CARDINAL_DIRS[round(deg / 45) % 8]
+    return degrees_to_cardinal_8(deg)
 
 
 def cardinal_to_tr(cardinal: str) -> str:

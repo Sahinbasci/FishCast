@@ -1,6 +1,6 @@
 # API_CONTRACTS.md — FishCast API
 
-> Contract Version: 1.2 | 2026-02-19
+> Contract Version: 1.3.2 | 2026-02-22
 
 ## Base
 - Dev: `http://localhost:8000/api/v1`
@@ -26,15 +26,35 @@ Bu kural burada TEK YERDE tanımlıdır. Diğer dosyalar buraya referans verir.
 
 ### 1. GET `/health` — Public
 ```json
-{"status":"ok","engineVersion":"1.0.0","rulesetVersion":"20260219.1","rulesCount":24}
+{"status":"ok","engineVersion":"1.0.0","rulesetVersion":"20260222.2","rulesCount":31}
 ```
 
 ### 2. GET `/decision/today` — Public (DECISION OUTPUT v1)
 
+**Query params:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `traceLevel` | `"none"\|"minimal"\|"full"` | `"none"` | Trace detail in spot scores |
+
+**Response includes `health` block (always present, v1.3.2 enhanced):**
+```json
+"health": {
+  "status": "good"|"degraded"|"bad",
+  "reasonsCode": [],
+  "reasonsTR": [],
+  "reasons": [],
+  "normalized": { "windSpeedKmhRaw": 12.0, "windCardinalDerived": "NE", "pressureTrendDerived": "stable" }
+}
+```
+
+**Reason codes (v1.3.2):** `data_quality_fallback`, `data_quality_cached`, `provider_issue`, `missing_sea_temp`, `missing_wave_height`.
+
+**Trace guard (v1.3.2):** When `ALLOW_TRACE_FULL=false` (default), `traceLevel=full` is downgraded to `minimal`. Meta includes `traceLevelRequested` / `traceLevelApplied` when downgraded.
+
 ```json
 {
   "meta": {
-    "contractVersion": "1.2",
+    "contractVersion": "1.3",
     "generatedAt": "2026-02-19T06:00:00Z",
     "timezone": "Europe/Istanbul"
   },
@@ -182,14 +202,23 @@ Bu kural burada TEK YERDE tanımlıdır. Diğer dosyalar buraya referans verir.
   ],
   "noGo": {
     "isNoGo": false,
-    "reasonsTR": []
+    "reasonsTR": [],
+    "shelteredExceptions": [
+      {
+        "spotId": "bebek",
+        "allowedTechniques": ["lrf"],
+        "warningLevel": "severe",
+        "messageTR": "Bebek korunaklı — sadece LRF, dikkatli ol!"
+      }
+    ]
   }
 }
 ```
 
 > **dataQuality:** Enum `"live"|"cached"|"fallback"`. Issues in `dataIssues[]`.
 > **bestWindowIndex:** 0-based index into `bestWindows[]`. null if no specific window.
-> **noGo:** Object `{isNoGo, reasonsTR[]}`. Tek kaynak: rule engine.
+> **noGo:** Object `{isNoGo, reasonsTR[], shelteredExceptions[]}`. Tek kaynak: rule engine.
+> **shelteredExceptions (v1.3):** Only present when `isNoGo=true`. Lists sheltered spots where limited fishing is possible.
 > **reportSignals24h:** null if no reports in 24h. Present only when data exists.
 > **mode:** `"chasing"|"selective"|"holding"`. Affects technique ranking, not safety.
 
@@ -198,6 +227,8 @@ Harita pini için tüm mera özetleri. (Schema unchanged from v1.1, `mode` field
 
 ### 4. GET `/scores/spot/{spotId}` — Public
 Detay skoru. speciesScores as ARRAY (see § MAP vs ARRAY Transform above).
+
+**Query params:** `traceLevel` (`"none"|"minimal"|"full"`, default `"none"`) — controls trace detail in response.
 
 ### 5. GET `/spots` — Public
 ### 6. POST `/reports` — Auth (photoUrl only, no base64)
@@ -221,7 +252,7 @@ export const RegionId = z.enum(["anadolu","avrupa","city_belt"]);
 export const SpeciesMode = z.enum(["chasing","selective","holding"]);
 export const DataQuality = z.enum(["live","cached","fallback"]);
 export const PressureTrend = z.enum(["falling","rising","stable"]);
-export const SeasonStatus = z.enum(["peak","active","closed"]);
+export const SeasonStatus = z.enum(["peak","shoulder","active","off","closed"]); // "off" = off-season (v1.3.1)
 export const CoordAccuracy = z.enum(["approx","verified"]);
 
 // DECISION OUTPUT
@@ -229,6 +260,8 @@ export const DecisionMeta = z.object({
   contractVersion: z.string(),
   generatedAt: z.string(),
   timezone: z.literal("Europe/Istanbul"),
+  traceLevelRequested: z.string().optional(),  // NEW v1.3.2: present when trace downgraded
+  traceLevelApplied: z.string().optional(),    // NEW v1.3.2: present when trace downgraded
 });
 
 export const DaySummary = z.object({
@@ -289,9 +322,29 @@ export const RegionDecision = z.object({
   recommendedSpot: RecommendedSpot,
 });
 
+export const ShelteredExceptionEntry = z.object({
+  spotId: z.string(),
+  allowedTechniques: z.array(z.string()),
+  warningLevel: z.string(),
+  messageTR: z.string(),
+});
+
 export const NoGo = z.object({
   isNoGo: z.boolean(),
   reasonsTR: z.array(z.string()),
+  shelteredExceptions: z.array(ShelteredExceptionEntry).optional(),  // NEW v1.3
+});
+
+export const HealthBlock = z.object({  // v1.3.1 + v1.3.2 enhanced
+  status: z.enum(["good","degraded","bad"]),
+  reasonsCode: z.array(z.string()).optional(),  // NEW v1.3.2: machine codes
+  reasonsTR: z.array(z.string()).optional(),     // NEW v1.3.2: Turkish text
+  reasons: z.array(z.string()).optional(),        // backward compat alias
+  normalized: z.object({
+    windSpeedKmhRaw: z.number(),
+    windCardinalDerived: z.string(),
+    pressureTrendDerived: z.string(),
+  }),
 });
 
 export const DecisionResponse = z.object({
@@ -300,6 +353,7 @@ export const DecisionResponse = z.object({
   bestWindows: z.array(BestWindow),
   regions: z.array(RegionDecision),
   noGo: NoGo,
+  health: HealthBlock.optional(),  // NEW v1.3.1
 });
 
 // SCORE TYPES (per-spot detail)
@@ -312,7 +366,9 @@ export const Solunar = z.object({
 export const ScoreBreakdown = z.object({
   pressure: z.number(), wind: z.number(), seaTemp: z.number(),
   solunar: z.number(), time: z.number(),
-  seasonMultiplier: z.number(), rulesBonus: z.number(),
+  seasonMultiplier: z.number(),  // DEPRECATED v1.3: always 1.0
+  seasonAdjustment: z.number().optional(),  // NEW v1.3: additive int
+  rulesBonus: z.number(),
 });
 
 export const SpeciesScore = z.object({
