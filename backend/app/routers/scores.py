@@ -28,9 +28,10 @@ async def _get_scores_for_spots(
     stormglass_key: str | None = None,
     scoring_config: dict[str, Any] | None = None,
     seasonality_config: dict[str, Any] | None = None,
+    offline_mode: bool = False,
 ) -> tuple[dict[str, Any], Any, dict[str, Any]]:
-    """Tüm mera'lar için weather + solunar + scores hesaplar."""
-    weather = await get_weather(stormglass_api_key=stormglass_key)
+    """Tum mera'lar icin weather + solunar + scores hesaplar."""
+    weather = await get_weather(stormglass_api_key=stormglass_key, offline_mode=offline_mode)
     solunar_data = compute_solunar()
     now = datetime.now()
 
@@ -67,10 +68,12 @@ async def scores_today(request: Request) -> list[dict[str, Any]]:
     scoring_config = getattr(request.app.state, "scoring_config", None)
     seasonality_config = getattr(request.app.state, "seasonality_config", None)
 
+    offline_mode = getattr(request.app.state, "offline_mode", False)
     spot_results, weather, _ = await _get_scores_for_spots(
         spots, rules, stormglass_key,
         scoring_config=scoring_config,
         seasonality_config=seasonality_config,
+        offline_mode=offline_mode,
     )
 
     result: list[dict[str, Any]] = []
@@ -155,7 +158,8 @@ async def score_spot_detail(
     allow_full = getattr(request.app.state, "allow_trace_full", False)
     applied_level = trace_level if trace_level != "full" or allow_full else "minimal"
 
-    weather = await get_weather(stormglass_api_key=stormglass_key)
+    offline_mode = getattr(request.app.state, "offline_mode", False)
+    weather = await get_weather(stormglass_api_key=stormglass_key, offline_mode=offline_mode)
     solunar_data = compute_solunar()
     now = datetime.now()
 

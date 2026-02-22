@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { API_URL, SPECIES_NAMES_TR, TECHNIQUE_NAMES_TR } from "@/lib/constants";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ReportFormProps {
   spotId: string;
@@ -9,6 +10,7 @@ interface ReportFormProps {
 }
 
 export default function ReportForm({ spotId, spotName }: ReportFormProps) {
+  const { user, signInWithGoogle, getIdToken, isConfigured } = useAuth();
   const [species, setSpecies] = useState("");
   const [technique, setTechnique] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -16,17 +18,35 @@ export default function ReportForm({ spotId, spotName }: ReportFormProps) {
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
-  const [needsAuth, setNeedsAuth] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setNeedsAuth(false);
 
+    if (!user) {
+      if (isConfigured) {
+        await signInWithGoogle();
+      } else {
+        setError("Firebase Authentication henuz yapilandirilmamis.");
+      }
+      return;
+    }
+
+    setSubmitting(true);
     try {
+      const token = await getIdToken();
+      if (!token) {
+        setError("Oturum suresi dolmus. Lutfen tekrar giris yapin.");
+        return;
+      }
+
       const res = await fetch(`${API_URL}/reports`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           spotId,
           species,
@@ -40,14 +60,16 @@ export default function ReportForm({ spotId, spotName }: ReportFormProps) {
       });
 
       if (res.status === 401) {
-        setNeedsAuth(true);
+        setError("Yetkilendirme hatasi. Lutfen tekrar giris yapin.");
         return;
       }
-      if (!res.ok) throw new Error("Gönderim hatası");
+      if (!res.ok) throw new Error("Gonderim hatasi");
 
       setSubmitted(true);
     } catch {
-      setError("Rapor gönderilemedi. Lütfen tekrar deneyin.");
+      setError("Rapor gonderilemedi. Lutfen tekrar deneyin.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -60,7 +82,7 @@ export default function ReportForm({ spotId, spotName }: ReportFormProps) {
         >
           <span className="text-xl">&#x2705;</span>
         </div>
-        <p className="text-[var(--green-primary)] font-semibold">Rapor başarıyla gönderildi!</p>
+        <p className="text-[var(--green-primary)] font-semibold">Rapor basariyla gonderildi!</p>
         <button
           onClick={() => {
             setSubmitted(false);
@@ -72,7 +94,7 @@ export default function ReportForm({ spotId, spotName }: ReportFormProps) {
           }}
           className="mt-3 text-sm text-[var(--blue-light)] hover:text-[var(--blue-bright)] underline underline-offset-4 transition-colors"
         >
-          Yeni rapor gönder
+          Yeni rapor gonder
         </button>
       </div>
     );
@@ -88,16 +110,24 @@ export default function ReportForm({ spotId, spotName }: ReportFormProps) {
         <span className="text-xs text-[var(--text-muted)] font-medium">Topluluk verisi</span>
       </div>
 
+      {!user && (
+        <div className="bg-[rgba(59,130,246,0.08)] border border-[rgba(59,130,246,0.2)] rounded-[var(--radius-md)] p-3.5">
+          <p className="text-[var(--blue-light)] text-sm">
+            Rapor gondermek icin giris yapmaniz gerekiyor.
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <select value={species} onChange={(e) => setSpecies(e.target.value)} required className={inputClass}>
-          <option value="">Tür seçin</option>
+          <option value="">Tur secin</option>
           {Object.entries(SPECIES_NAMES_TR).map(([id, name]) => (
             <option key={id} value={id}>{name}</option>
           ))}
         </select>
 
         <select value={technique} onChange={(e) => setTechnique(e.target.value)} required className={inputClass}>
-          <option value="">Teknik seçin</option>
+          <option value="">Teknik secin</option>
           {Object.entries(TECHNIQUE_NAMES_TR).map(([id, name]) => (
             <option key={id} value={id}>{name}</option>
           ))}
@@ -109,13 +139,6 @@ export default function ReportForm({ spotId, spotName }: ReportFormProps) {
 
       <textarea value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={500} placeholder="Notlar (opsiyonel)" className={`${inputClass} resize-none`} rows={2} />
 
-      {needsAuth && (
-        <div className="bg-[rgba(249,115,22,0.08)] border border-[rgba(249,115,22,0.2)] rounded-[var(--radius-md)] p-3.5">
-          <p className="text-[var(--orange-primary)] font-semibold mb-1 text-sm">Rapor göndermek için giriş yapmalısınız</p>
-          <p className="text-[var(--orange-warm)] opacity-60 text-xs">Firebase Authentication henüz yapılandırılmamış.</p>
-        </div>
-      )}
-
       {error && (
         <div className="bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.2)] rounded-[var(--radius-md)] p-3.5">
           <p className="text-sm text-[var(--red-light)]">{error}</p>
@@ -124,10 +147,11 @@ export default function ReportForm({ spotId, spotName }: ReportFormProps) {
 
       <button
         type="submit"
-        className="w-full rounded-[var(--radius-md)] py-2.5 text-sm font-bold text-white transition-all active:scale-[0.98]"
+        disabled={submitting}
+        className="w-full rounded-[var(--radius-md)] py-2.5 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50"
         style={{ background: "var(--gradient-ocean)" }}
       >
-        Rapor Gönder
+        {submitting ? "Gonderiliyor..." : user ? "Rapor Gonder" : "Giris Yap ve Gonder"}
       </button>
     </form>
   );

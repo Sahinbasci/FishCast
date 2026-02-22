@@ -1,7 +1,8 @@
 """FishCast reports endpoints.
 
 POST /reports — av raporu ekle (Firebase Auth gerekli).
-GET /reports/spot/{spotId} — mera raporları (public: son 24h).
+GET /reports/user — kullanici raporlari (auth).
+GET /reports/spot/{spotId} — public: aggregate-only (24h), auth: own reports.
 """
 
 from __future__ import annotations
@@ -75,6 +76,7 @@ async def create_report(
     now = datetime.now(tz=timezone.utc)
 
     # Build report document
+    # timestamp: native datetime — Firestore stores as Timestamp type
     report_doc = {
         "userId": user["uid"],
         "spotId": report.spot_id,
@@ -85,7 +87,8 @@ async def create_report(
         "bait": report.bait,
         "notes": report.notes,
         "photoUrl": report.photo_url,
-        "timestamp": now.isoformat(),
+        "timestamp": now,
+        "createdAt": now,
         "verified": False,
         "weatherSnapshot": {},  # Will be filled if weather available
     }
@@ -116,25 +119,72 @@ async def create_report(
 
 
 @router.get(
+    "/reports/user",
+    summary="Kullanici raporlari",
+    description="Oturum acmis kullanicinin tum raporlarini doner.",
+)
+async def get_user_reports(
+    authorization: Optional[str] = Header(None),
+) -> dict[str, Any]:
+    """Kullanicinin kendi av raporlarini doner."""
+    user = await get_auth_user(authorization)
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Raporlarinizi gormek icin giris yapmaniz gerekiyor",
+        )
+
+    db = get_firestore_db()
+    reports: list[dict[str, Any]] = []
+
+    if db:
+        try:
+            docs = (
+                db.collection("reports")
+                .where("userId", "==", user["uid"])
+                .order_by("timestamp", direction="DESCENDING")
+                .limit(100)
+                .stream()
+            )
+            for doc in docs:
+                report = doc.to_dict()
+                # Serialize Firestore Timestamp to ISO string for API
+                ts = report.get("timestamp")
+                if hasattr(ts, "isoformat"):
+                    report["timestamp"] = ts.isoformat()
+                reports.append(report)
+        except Exception as e:
+            logger.error("Kullanici raporlari okunamadi: %s", e)
+
+    return {
+        "userId": user["uid"],
+        "reports": reports,
+        "totalCount": len(reports),
+    }
+
+
+@router.get(
     "/reports/spot/{spot_id}",
-    summary="Mera raporları",
-    description="Belirtilen meranın son 24 saat raporlarını döner.",
+    summary="Mera raporlari",
+    description="Public: son 24h aggregate ozet. Auth: kullanicinin kendi raporlari.",
 )
 async def get_spot_reports(
     spot_id: str,
     request: Request,
     authorization: Optional[str] = Header(None),
 ) -> dict[str, Any]:
-    """Meranın av raporlarını döner.
+    """Meranin av rapor ozetini veya kullanici raporlarini doner.
 
-    Public: son 24h.
-    Auth: tümü.
+    Public (no auth): Aggregate-only summary (24h) — totalReports,
+    speciesCounts, techniqueCounts. No raw per-report data.
+
+    Auth: User's own raw reports for this spot.
 
     Args:
-        spot_id: Mera kimliği.
+        spot_id: Mera kimligi.
 
     Returns:
-        Rapor listesi.
+        Aggregate ozet (public) veya rapor listesi (auth, own only).
     """
     # Spot validation
     spots = request.app.state.spots
@@ -142,29 +192,69 @@ async def get_spot_reports(
     if spot is None:
         raise HTTPException(status_code=404, detail=f"Mera bulunamadı: {spot_id}")
 
-    # Try Firestore
+    user = await get_auth_user(authorization)
     db = get_firestore_db()
-    reports: list[dict[str, Any]] = []
 
-    if db:
-        try:
-            user = await get_auth_user(authorization)
-            cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=24)
+    if user is None:
+        # === PUBLIC: aggregate-only (privacy-safe) ===
+        species_counts: dict[str, int] = {}
+        technique_counts: dict[str, int] = {}
+        total = 0
 
-            query = db.collection("reports").where("spotId", "==", spot_id)
-            if user is None:
-                # Public: only last 24h
-                query = query.where("timestamp", ">=", cutoff.isoformat())
+        if db:
+            try:
+                cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=24)
+                query = (
+                    db.collection("reports")
+                    .where("spotId", "==", spot_id)
+                    .where("timestamp", ">=", cutoff)
+                )
+                docs = query.stream()
+                for doc in docs:
+                    r = doc.to_dict()
+                    total += 1
+                    sp = r.get("species", "unknown")
+                    species_counts[sp] = species_counts.get(sp, 0) + r.get("quantity", 1)
+                    tc = r.get("technique", "unknown")
+                    technique_counts[tc] = technique_counts.get(tc, 0) + 1
+            except Exception as e:
+                logger.error("Spot aggregate raporlar okunamadi: %s", e)
 
-            docs = query.order_by("timestamp", direction="DESCENDING").limit(50).stream()
-            for doc in docs:
-                reports.append(doc.to_dict())
-        except Exception as e:
-            logger.error("Raporlar okunamadı: %s", e)
+        return {
+            "spotId": spot_id,
+            "spotName": spot.name,
+            "period": "24h",
+            "totalReports": total,
+            "speciesCounts": species_counts,
+            "techniqueCounts": technique_counts,
+        }
+    else:
+        # === AUTH: user's own reports for this spot ===
+        reports: list[dict[str, Any]] = []
 
-    return {
-        "spotId": spot_id,
-        "spotName": spot.name,
-        "reports": reports,
-        "totalCount": len(reports),
-    }
+        if db:
+            try:
+                docs = (
+                    db.collection("reports")
+                    .where("spotId", "==", spot_id)
+                    .where("userId", "==", user["uid"])
+                    .order_by("timestamp", direction="DESCENDING")
+                    .limit(50)
+                    .stream()
+                )
+                for doc in docs:
+                    report = doc.to_dict()
+                    # Serialize Firestore Timestamp to ISO string for API
+                    ts = report.get("timestamp")
+                    if hasattr(ts, "isoformat"):
+                        report["timestamp"] = ts.isoformat()
+                    reports.append(report)
+            except Exception as e:
+                logger.error("Kullanici spot raporlari okunamadi: %s", e)
+
+        return {
+            "spotId": spot_id,
+            "spotName": spot.name,
+            "reports": reports,
+            "totalCount": len(reports),
+        }

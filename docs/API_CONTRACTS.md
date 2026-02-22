@@ -1,6 +1,6 @@
 # API_CONTRACTS.md — FishCast API
 
-> Contract Version: 1.3.2 | 2026-02-22
+> Contract Version: 1.4.1 | 2026-02-22
 
 ## Base
 - Dev: `http://localhost:8000/api/v1`
@@ -232,9 +232,77 @@ Detay skoru. speciesScores as ARRAY (see § MAP vs ARRAY Transform above).
 
 ### 5. GET `/spots` — Public
 ### 6. POST `/reports` — Auth (photoUrl only, no base64)
-### 7. GET `/reports/spot/{spotId}` — Public (24h) / Auth (all)
-### 8. GET `/species` — Public
-### 9. GET `/techniques` — Public
+
+**Note (v1.4.1):** `timestamp` field stored as native Firestore Timestamp (not ISO string). API responses serialize to ISO 8601.
+
+### 7. GET `/reports/spot/{spotId}` — Public: aggregate / Auth: own reports (v1.4.1)
+
+**Public (no auth):** Returns aggregate-only summary for last 24h. No raw per-report data exposed.
+
+```json
+{
+  "spotId": "tarabya",
+  "spotName": "Tarabya",
+  "period": "24h",
+  "totalReports": 12,
+  "speciesCounts": {"istavrit": 35, "cinekop": 8},
+  "techniqueCounts": {"capari": 7, "kursun_arkasi": 3, "yemli_dip": 2}
+}
+```
+
+**Auth:** Returns authenticated user's own raw reports for this spot.
+
+```json
+{
+  "spotId": "tarabya",
+  "spotName": "Tarabya",
+  "reports": [...],
+  "totalCount": 5
+}
+```
+
+### 8. GET `/reports/user` — Auth (v1.4.0)
+
+Returns the authenticated user's own catch reports, newest first.
+
+**Headers:** `Authorization: Bearer <firebase_id_token>` (required)
+
+**Response:**
+```json
+{
+  "reports": [
+    {
+      "spotId": "tarabya",
+      "species": "istavrit",
+      "quantity": 5,
+      "avgSize": "20cm",
+      "technique": "capari",
+      "notes": null,
+      "timestamp": "2026-02-22T10:30:00Z"
+    }
+  ]
+}
+```
+**Errors:** 401 (no/invalid token).
+
+### 9. GET `/species` — Public
+### 10. GET `/techniques` — Public
+
+### 11. GET `/_meta` — Public (v1.4.1)
+
+Deploy guard endpoint. Returns runtime configuration for CI/CD verification.
+
+```json
+{
+  "offlineMode": false,
+  "allowTraceFull": false,
+  "rulesetVersion": "20260222.2",
+  "rulesCount": 31,
+  "buildSha": "abc123def456"
+}
+```
+
+Deploy workflow asserts `offlineMode==false` and `allowTraceFull==false` after every production deploy.
 
 ---
 

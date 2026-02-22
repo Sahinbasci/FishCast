@@ -1,12 +1,14 @@
 """FishCast internal endpoints.
 
 POST /internal/calculate-scores — Cloud Scheduler cron trigger.
+GET /_meta — Deploy guard: runtime config inspection.
 Tüm 16 mera × 5 Tier1 tür hesaplar, Firestore'a yazar.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -122,4 +124,25 @@ async def calculate_scores(request: Request) -> dict[str, Any]:
         "firestoreWritten": firestore_written,
         "dataQuality": weather.data_quality.value,
         "dataIssues": weather.data_issues,
+    }
+
+
+@router.get(
+    "/_meta",
+    summary="Deploy meta bilgisi",
+    description="Calisma ortami bilgisi. Deploy dogrulamasi icin kullanilir.",
+)
+async def get_meta(request: Request) -> dict[str, Any]:
+    """Runtime configuration for deploy verification.
+
+    Returns offlineMode, allowTraceFull, rulesetVersion, rulesCount, buildSha.
+    Used by deploy.yml to assert production safety invariants.
+    """
+    rules = getattr(request.app.state, "rules", [])
+    return {
+        "offlineMode": getattr(request.app.state, "offline_mode", False),
+        "allowTraceFull": getattr(request.app.state, "allow_trace_full", False),
+        "rulesetVersion": "20260222.2",
+        "rulesCount": len(rules),
+        "buildSha": os.getenv("GIT_SHA", "unknown"),
     }

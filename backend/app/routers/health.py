@@ -6,7 +6,7 @@ Provides system status, engine version, and ruleset information.
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 router = APIRouter()
 
@@ -40,15 +40,16 @@ class HealthResponse(BaseModel):
     summary="Sistem sağlık kontrolü",
     description="API durumunu, motor ve kural seti versiyonlarını döner.",
 )
-async def health_check() -> HealthResponse:
+async def health_check(request: Request) -> HealthResponse:
     """Sistem sağlık kontrolü endpoint'i.
 
     Returns:
         HealthResponse: Sistem durumu, motor versiyonu, kural seti bilgisi.
     """
+    rules = getattr(request.app.state, "rules", [])
     return HealthResponse(
         status="ok",
         engine_version="1.0.0",
         ruleset_version="20260222.2",
-        rules_count=31,
+        rules_count=len(rules),
     )

@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Reports: owner-only read/write from client.
+    // Public spot feeds served via backend Admin SDK (bypasses rules).
+    match /reports/{reportId} {
+      allow read: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        // Required fields
+        && request.resource.data.keys().hasAll(['spotId', 'species', 'quantity', 'technique', 'timestamp', 'userId'])
+        // Field allowlist — reject unknown fields (prevent document stuffing)
+        && request.resource.data.keys().hasOnly([
+             'spotId', 'species', 'quantity', 'technique', 'timestamp', 'userId',
+             'avgSize', 'bait', 'notes', 'photoUrl', 'verified', 'weatherSnapshot',
+             'createdAt', 'updatedAt', 'id'
+           ])
+        // Max fields guard (prevent stuffing even with allowed keys)
+        && request.resource.data.size() <= 15
+        // Type + size validations
+        && request.resource.data.spotId is string
+        && request.resource.data.spotId.size() <= 50
+        && request.resource.data.species is string
+        && request.resource.data.species.size() <= 50
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity >= 1
+        && request.resource.data.quantity <= 100
+        && request.resource.data.technique is string
+        && request.resource.data.technique.size() <= 50
+        // timestamp: Firestore Timestamp type
+        && request.resource.data.timestamp is timestamp
+        // Optional field size guards
+        && (!request.resource.data.keys().hasAny(['notes']) || (
+              request.resource.data.notes is string
+              && request.resource.data.notes.size() <= 500
+           ))
+        && (!request.resource.data.keys().hasAny(['avgSize']) || (
+              request.resource.data.avgSize is string
+              && request.resource.data.avgSize.size() <= 20
+           ))
+        && (!request.resource.data.keys().hasAny(['bait']) || (
+              request.resource.data.bait is string
+              && request.resource.data.bait.size() <= 50
+           ))
+        && (!request.resource.data.keys().hasAny(['photoUrl']) || (
+              request.resource.data.photoUrl is string
+              && request.resource.data.photoUrl.size() <= 500
+           ));
+
+      allow update: if request.auth != null
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        // Field allowlist on update
+        && request.resource.data.keys().hasOnly([
+             'spotId', 'species', 'quantity', 'technique', 'timestamp', 'userId',
+             'avgSize', 'bait', 'notes', 'photoUrl', 'verified', 'weatherSnapshot',
+             'createdAt', 'updatedAt', 'id'
+           ])
+        && request.resource.data.size() <= 15
+        // Immutable fields — cannot change after creation
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.spotId == resource.data.spotId
+        && request.resource.data.timestamp == resource.data.timestamp;
+
+      allow delete: if false; // Immutable; soft-delete via backend only
+    }
+
+    // Decisions: backend writes, anyone reads
+    match /decisions/{docId} {
+      allow read: if true;
+      allow write: if false; // Only backend Admin SDK
+    }
+
+    // Scores: backend writes, anyone reads
+    match /scores/{dateId}/{document=**} {
+      allow read: if true;
+      allow write: if false; // Only backend Admin SDK
+    }
+
+    // Cache: no client access
+    match /cache/{docId} {
+      allow read, write: if false; // Only backend Admin SDK
+    }
+
+    // Users profile: owner-only
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

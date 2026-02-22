@@ -1,10 +1,34 @@
 # INSTRUCTIONS.md — FishCast Project
 
-> Contract Version: 1.3.2 | 2026-02-22
+> Contract Version: 1.4.1 | 2026-02-22
 
 ## Proje
 **FishCast** — Istanbul kıyı balıkçıları için veri temelli av karar destek sistemi.
 MVP: 3 hafta. Kural motoru balıkçı feedback'iyle agresif iterate edilecek.
+
+## Changelog v1.4.1 (2026-02-22)
+- **Firestore rules hardened**: Field allowlist (hasOnly), string size guards, max fields per doc, timestamp as native Firestore Timestamp type, immutable fields on update.
+- **Aggregate-only public spot reports**: GET /reports/spot/{id} without auth returns totalReports/speciesCounts/techniqueCounts only — no raw per-report data.
+- **Weather LRU cache**: OrderedDict + asyncio.Lock replaces plain dict with O(n) eviction. O(1) LRU eviction, thread-safe.
+- **/_meta deploy guard**: GET /_meta returns offlineMode, allowTraceFull, buildSha. Deploy workflow asserts safety invariants.
+- **Auth hardening**: check_revoked=True on token verification. Explicit error categorization (expired/revoked/invalid).
+- **CORS 127.0.0.1**: Dev defaults include 127.0.0.1 ports alongside localhost.
+- **Cloud Run concurrency**: 80 → 40 for safer memory profile.
+- **CI/CD hardening**: OFFLINE_MODE=true for smoke, secret leak check, fork protection on docker-build + deploy.
+- **GIT_SHA env var**: Injected by CI/CD, exposed via /_meta for build tracing.
+
+## Changelog v1.4.0 (2026-02-22)
+- **Production Dockerfile**: python:3.12-slim + gunicorn/uvicorn workers for Cloud Run.
+- **CORS env-var driven**: `CORS_ALLOWED_ORIGINS` env var with safe defaults.
+- **OFFLINE_MODE**: Env var for zero-external-call weather fixture (smoke/dev).
+- **Weather TTL cache**: In-memory 10-min cache keyed by lat/lng.
+- **Firebase Auth frontend**: Google Sign-In via AuthContext + NavBar.
+- **Catch history page**: `GET /reports/user` endpoint + `/catches` page.
+- **Firestore rules/indexes**: Least privilege security rules + composite indexes.
+- **CI/CD**: GitHub Actions `ci.yml` (PR test/build) + `deploy.yml` (manual Cloud Run).
+- **Next.js standalone**: `output: "standalone"` for optimized deployment.
+- **Env examples**: `.env.example` for backend and frontend.
+- **Runbook**: `docs/RUNBOOK_PROD.md` v1.4.0 — deploy, health, troubleshooting.
 
 ## Changelog v1.3.2 (2026-02-22)
 - **Health block reason codes**: `reasonsCode[]` (machine), `reasonsTR[]` (Turkish), `reasons` alias (backward compat).

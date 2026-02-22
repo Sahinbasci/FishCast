@@ -11,7 +11,10 @@ Units Table (INSTRUCTIONS.md):
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -26,6 +29,51 @@ logger = logging.getLogger(__name__)
 
 ISTANBUL_LAT = 41.01
 ISTANBUL_LNG = 28.98
+
+# In-memory LRU cache for weather responses (avoids hammering external APIs)
+# OrderedDict for O(1) eviction, asyncio.Lock for concurrency safety
+_weather_cache: OrderedDict[str, tuple[float, "WeatherData"]] = OrderedDict()
+_CACHE_TTL_SECONDS = 600  # 10 minutes
+_MAX_CACHE_SIZE = 50  # Max entries; evict LRU when exceeded
+_cache_lock = asyncio.Lock()
+
+
+async def _cache_get(key: str) -> "WeatherData | None":
+    """Thread-safe LRU cache read with TTL check.
+
+    On hit: moves entry to end (most-recently-used).
+    On miss or expired: returns None.
+    """
+    now_ts = time.monotonic()
+    async with _cache_lock:
+        if key not in _weather_cache:
+            return None
+        cached_ts, cached_data = _weather_cache[key]
+        if now_ts - cached_ts >= _CACHE_TTL_SECONDS:
+            # Expired — remove
+            del _weather_cache[key]
+            return None
+        # Hit — move to end (most recently used)
+        _weather_cache.move_to_end(key)
+        return cached_data
+
+
+async def _cache_put(key: str, data: "WeatherData") -> None:
+    """Thread-safe LRU cache write with bounded size.
+
+    If cache exceeds MAX_CACHE_SIZE, evicts least-recently-used (first) entry.
+    """
+    now_ts = time.monotonic()
+    async with _cache_lock:
+        # If key already exists, update and move to end
+        if key in _weather_cache:
+            _weather_cache[key] = (now_ts, data)
+            _weather_cache.move_to_end(key)
+        else:
+            _weather_cache[key] = (now_ts, data)
+        # Evict LRU entries (first in OrderedDict) if over limit
+        while len(_weather_cache) > _MAX_CACHE_SIZE:
+            _weather_cache.popitem(last=False)
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 STORMGLASS_URL = "https://api.stormglass.io/v2/weather/point"
@@ -312,6 +360,28 @@ async def set_stormglass_cache(db: Any, sea_temp_c: float, wave_height_m: Option
         logger.error("Stormglass cache yazma hatası: %s", e)
 
 
+# --- Offline Fixture ---
+
+def _offline_weather() -> WeatherData:
+    """Returns deterministic fixture weather data for OFFLINE_MODE.
+
+    Zero external API calls. Used by smoke tests and CI.
+    """
+    month = datetime.now().month
+    return WeatherData(
+        wind_speed_kmh=10.0,
+        wind_dir_deg=45,
+        pressure_hpa=1015.0,
+        pressure_change_3h_hpa=-0.5,
+        air_temp_c=15.0,
+        cloud_cover_pct=40.0,
+        sea_temp_c=MONTHLY_SEA_TEMP[month],
+        wave_height_m=0.3,
+        data_quality=DataQuality.fallback,
+        data_issues=["OFFLINE_MODE: fixture verisi kullaniliyor"],
+    )
+
+
 # --- Composite Weather Fetch ---
 
 async def get_weather(
@@ -319,22 +389,36 @@ async def get_weather(
     firestore_db: Any = None,
     lat: float = ISTANBUL_LAT,
     lng: float = ISTANBUL_LNG,
+    offline_mode: bool = False,
 ) -> WeatherData:
-    """Tüm hava ve su verilerini toplar, normalize eder.
+    """Tum hava ve su verilerini toplar, normalize eder.
 
     Provider priority:
         1. Open-Meteo (hava) — fail durumunda default values
-        2. Stormglass (su) — fail → Firestore cache → MONTHLY_SEA_TEMP fallback
+        2. Stormglass (su) — fail -> Firestore cache -> MONTHLY_SEA_TEMP fallback
 
     Args:
         stormglass_api_key: Stormglass API key (opsiyonel).
-        firestore_db: Firestore client (cache için, opsiyonel).
+        firestore_db: Firestore client (cache icin, opsiyonel).
         lat: Enlem.
         lng: Boylam.
+        offline_mode: True ise external API cagrilmaz (fixture doner).
 
     Returns:
-        WeatherData: Normalize edilmiş hava verisi. ASLA None dönmez.
+        WeatherData: Normalize edilmis hava verisi. ASLA None donmez.
     """
+    # OFFLINE_MODE: return fixture, zero external calls
+    if offline_mode:
+        logger.info("OFFLINE_MODE: fixture weather verisi kullaniliyor")
+        return _offline_weather()
+
+    # In-memory LRU cache check
+    cache_key = f"{lat:.2f}_{lng:.2f}"
+    cached_data = await _cache_get(cache_key)
+    if cached_data is not None:
+        logger.info("Weather cache hit: %s", cache_key)
+        return cached_data
+
     data_issues: list[str] = []
     quality_flags: list[str] = []
 
@@ -351,7 +435,7 @@ async def get_weather(
             "cloudCoverPct": 50.0,
             "status": "fallback",
         }
-        data_issues.append("Hava verisi alınamadı — varsayılan değerler kullanılıyor")
+        data_issues.append("Hava verisi alinamadi — varsayilan degerler kullaniliyor")
         quality_flags.append("fallback")
     else:
         quality_flags.append("live")
@@ -374,7 +458,7 @@ async def get_weather(
         if cached and cached.get("seaTempC") is not None:
             sea_temp_c = cached["seaTempC"]
             wave_height_m = cached.get("waveHeightM")
-            data_issues.append("Su sıcaklığı: cache'ten (Stormglass geçici olarak erişilemez)")
+            data_issues.append("Su sicakligi: cache'ten (Stormglass gecici olarak erisilemez)")
             quality_flags.append("cached")
         else:
             # MONTHLY_SEA_TEMP fallback
@@ -382,8 +466,8 @@ async def get_weather(
             sea_temp_c = MONTHLY_SEA_TEMP[month]
             wave_height_m = None
             data_issues.append(
-                f"Su sıcaklığı: aylık ortalama ({sea_temp_c}°C) kullanılıyor — "
-                "Stormglass verisi alınamadı"
+                f"Su sicakligi: aylik ortalama ({sea_temp_c}C) kullaniliyor — "
+                "Stormglass verisi alinamadi"
             )
             quality_flags.append("fallback")
 
@@ -395,7 +479,7 @@ async def get_weather(
     else:
         data_quality = DataQuality.live
 
-    return WeatherData(
+    result = WeatherData(
         wind_speed_kmh=meteo["windSpeedKmh"],
         wind_dir_deg=meteo["windDirDeg"],
         pressure_hpa=meteo["pressureHpa"],
@@ -407,3 +491,8 @@ async def get_weather(
         data_quality=data_quality,
         data_issues=data_issues,
     )
+
+    # Store in LRU cache (bounded, thread-safe)
+    await _cache_put(cache_key, result)
+
+    return result

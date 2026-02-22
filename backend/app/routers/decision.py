@@ -44,7 +44,8 @@ async def decision_today(
     stormglass_key = getattr(request.app.state, "stormglass_api_key", None)
 
     # Fetch weather and solunar
-    weather = await get_weather(stormglass_api_key=stormglass_key)
+    offline_mode = getattr(request.app.state, "offline_mode", False)
+    weather = await get_weather(stormglass_api_key=stormglass_key, offline_mode=offline_mode)
     solunar_data = compute_solunar()
 
     # v1.3: Pass configs for DI

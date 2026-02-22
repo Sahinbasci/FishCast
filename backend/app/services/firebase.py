@@ -74,6 +74,9 @@ def get_firestore_db() -> Any:
 async def verify_firebase_token(token: str) -> Optional[dict[str, Any]]:
     """Firebase Auth token'ı doğrular.
 
+    Uses check_revoked=True to reject revoked tokens.
+    Catches specific Firebase Auth exceptions for clear logging.
+
     Args:
         token: Firebase ID token (Bearer token'dan parsed).
 
@@ -85,10 +88,19 @@ async def verify_firebase_token(token: str) -> Optional[dict[str, Any]]:
 
     try:
         from firebase_admin import auth
-        decoded = auth.verify_id_token(token)
+        decoded = auth.verify_id_token(token, check_revoked=True)
         return decoded
     except Exception as e:
-        logger.warning("Token doğrulama hatası: %s", e)
+        # Categorize error for clear logging
+        err_type = type(e).__name__
+        if "ExpiredIdTokenError" in err_type:
+            logger.warning("Token suresi dolmus")
+        elif "RevokedIdTokenError" in err_type:
+            logger.warning("Token iptal edilmis")
+        elif "InvalidIdTokenError" in err_type or "CertificateFetchError" in err_type:
+            logger.warning("Gecersiz token formati: %s", err_type)
+        else:
+            logger.warning("Token dogrulama hatasi: %s — %s", err_type, e)
         return None
 
 

@@ -117,6 +117,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.allow_trace_full = os.getenv("ALLOW_TRACE_FULL", "false").lower() == "true"
     logger.info("ALLOW_TRACE_FULL = %s", app.state.allow_trace_full)
 
+    # Offline mode: skip all external API calls (for smoke tests & CI)
+    app.state.offline_mode = os.getenv("OFFLINE_MODE", "false").lower() == "true"
+    logger.info("OFFLINE_MODE = %s", app.state.offline_mode)
+
+    # Build SHA for deploy verification (set by CI/CD)
+    app.state.git_sha = os.getenv("GIT_SHA", "unknown")
+    logger.info("GIT_SHA = %s", app.state.git_sha)
+
     # Firebase (opsiyonel — yoksa da API çalışır)
     try:
         initialize_firebase()
@@ -138,19 +146,26 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
+# CORS middleware — origins from env or defaults
+_default_origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:3002",
+    "https://fishcast.app",
+    "https://www.fishcast.app",
+]
+_env_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+cors_origins = [o.strip() for o in _env_origins.split(",") if o.strip()] if _env_origins else _default_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:3002",
-        "https://fishcast.app",
-        "https://www.fishcast.app",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Router mount'lar — tümü /api/v1 prefix ile
