@@ -60,6 +60,7 @@ ruleBonusCaps:
   techniqueTime: 8      # max bonus from time+technique rules (priority 4-5)
   weatherMode: 15       # max bonus from weather+mode rules (priority 7-8)
   totalCap: 25          # absolute max bonus across all categories
+  negativeFloor: -20    # minimum (most negative) total rule penalty allowed
   # Category assignment by rule priority ranges:
   # priority 9: windCoastRules
   # priority 7-8: weatherMode

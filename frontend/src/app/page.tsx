@@ -33,7 +33,10 @@ export default function HomePage() {
     <div className="space-y-8">
       {/* NO-GO Overlay */}
       {decision?.noGo?.isNoGo && (
-        <NoGoOverlay reasonsTR={decision.noGo.reasonsTR} />
+        <NoGoOverlay
+          reasonsTR={decision.noGo.reasonsTR}
+          shelteredExceptions={decision.noGo.shelteredExceptions}
+        />
       )}
 
       {/* Weather KPI Cards */}

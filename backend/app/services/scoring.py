@@ -340,6 +340,9 @@ def compute_confidence(
 
 
 # --- Wind Exposure Adjustment ---
+# TODO(v2): Integrate into wind_score() for spot-specific wind impact.
+# Currently unused — wind_score() only uses global wind data.
+# Config exists in scoring_config.yaml["windExposureAdjustments"].
 
 def compute_wind_exposure_adjustment(
     spot: Any,
@@ -349,6 +352,8 @@ def compute_wind_exposure_adjustment(
     """Compute wind exposure adjustment for a spot.
 
     Reads spot's wind_exposure_map and scoring_config["windExposureAdjustments"].
+
+    NOTE: Currently not called in the scoring pipeline. Preserved for v2 integration.
     """
     if scoring_config is None:
         return 0.0
@@ -487,14 +492,29 @@ def calculate_species_score(
     # Rule bonus — already capped by category in rules.py
     # Apply totalCap as final safety net
     if scoring_config and "ruleBonusCaps" in scoring_config:
-        total_cap = scoring_config["ruleBonusCaps"].get("totalCap", 25)
+        caps = scoring_config["ruleBonusCaps"]
+        total_cap = caps.get("totalCap", 25)
+        negative_floor = caps.get("negativeFloor", -20)
     else:
         total_cap = 30
-    capped_bonus = min(total_cap, rule_bonus) if rule_bonus > 0 else rule_bonus
+        negative_floor = -20
+    if rule_bonus > 0:
+        capped_bonus = min(total_cap, rule_bonus)
+    else:
+        capped_bonus = max(negative_floor, rule_bonus)
 
     # Final score (v1.3 additive)
     raw_score = round(weighted_sum * 100 + season_adj) + capped_bonus
     final_score = max(0, min(100, raw_score))
+
+    # offFloor enforcement: off-season species never below configured floor
+    # This ensures "parca ihtimali" (stray fish) is always visible
+    off_floor = 10  # default
+    if season_status == "off" and seasonality_config and "species" in seasonality_config:
+        sp_cfg = seasonality_config["species"].get(species_id, {})
+        off_floor = sp_cfg.get("offFloor", 10)
+        if final_score < off_floor:
+            final_score = off_floor
 
     # Confidence
     confidence = compute_confidence(

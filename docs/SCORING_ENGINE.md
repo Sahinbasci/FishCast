@@ -1,6 +1,6 @@
 # SCORING_ENGINE.md — FishCast Skor Motoru
 
-> Contract Version: 1.3.2 | 2026-02-22
+> Contract Version: 1.4.2 | 2026-02-23
 
 ## Formül (v1.3 — Additive Season)
 ```
@@ -212,9 +212,11 @@ E�er gelecekte başka NO-GO tetikleyicileri eklenecekse, yeni bir rule yazıl�
 
 All condition fields are AND'd. Lists are OR within field.
 
-### Rule Schema (v1.3)
+### Rule Schema (v1.4.2)
 ```yaml
 - id: string               # unique, snake_case
+  enabled: true             # NEW v1.4.2: optional, default true. Set false to disable rule.
+  disableReason: null       # NEW v1.4.2: optional string explaining why disabled.
   condition: {}             # all AND'd
   effects:
     - applyToSpecies: ["*"] | ["species_id", ...]
@@ -225,8 +227,14 @@ All condition fields are AND'd. Lists are OR within field.
       noGo: false           # optional
   messageTR: string
   priority: 1-10
-  category: string          # NEW v1.3: "absolute"|"windCoast"|"weatherMode"|"istanbul"|"techniqueTime"
+  category: string          # "absolute"|"windCoast"|"weatherMode"|"istanbul"|"techniqueTime"
 ```
+
+### Disabled Rules (v1.4.2)
+Rules with `enabled: false` are skipped during evaluation. They remain in rules.yaml for tracking and are counted in `/_meta.disabledRulesCount`. Currently 3 disabled:
+- `post_poyraz_migration` — wind_history_48h data source not implemented
+- `after_rain_bonus` — rain data not yet integrated from Open-Meteo
+- `strong_current_warning` — Bosphorus current_speed API (SHOD) pending
 
 ### Rule Categories (v1.3)
 | Category | Priority Range | Description |
@@ -251,7 +259,7 @@ ruleBonusCaps:
 1. Group fired rule bonuses by `category` per species.
 2. Apply per-category cap (e.g., windCoast max 12).
 3. Sum capped **positive** categories → apply totalCap (25) to positives only.
-4. Negative bonuses **not capped** — added after totalCap: `final = min(totalCap, Σpos_capped) + Σneg`.
+4. Negative bonuses **floored at -20** (v1.4.2): `final = min(totalCap, Σpos_capped) + max(negativeFloor, Σneg)`.
 5. Trace data stored: `category_raw_bonuses`, `category_capped_bonuses`, `positive_total_raw`, `positive_total_capped`, `negative_total`, `final_rule_bonus`.
 
 ### Conflict Resolution
@@ -279,12 +287,14 @@ Single canonical utility: `app/utils/wind.py`
 - `degrees_to_cardinal_8(deg)` — 0→N, 45→NE, 90→E, ...
 - `normalize_cardinal_8(card)` — NNE→NE, WSW→SW, ...
 
-### Water Mass Proxy (v1.3)
+### Water Mass Proxy (v1.3, graded v1.4.2)
 Lodos (SW/S) pushes warm Marmara water into Bosphorus → palamut favorable.
 Poyraz (NE/N) pushes cold Black Sea water → bluefish (cinekop/sarıkanat) favorable.
 Config: `scoring_config.yaml["waterMassProxy"]`.
 
-### 31 Rules (24 original + 7 new)
+**Graded Effect (v1.4.2):** Water mass proxy rules now scale bonus by `waterMassStrength` (0.0–1.0). A light poyraz gives proportionally less bonus than a strong one. Formula: `score_bonus = round(raw_bonus × wm_strength)`.
+
+### 31 Rules (28 active + 3 disabled)
 
 ```yaml
 # === ABSOLUTE (Priority 10) === [category: absolute]
@@ -344,7 +354,8 @@ Config: `scoring_config.yaml["waterMassProxy"]`.
   messageTR: "Soğuk su — çinekop/sarıkanat yeme geç."
   priority: 7
 
-- id: "post_poyraz_migration"
+- id: "post_poyraz_migration"            # DISABLED: wind_history_48h not available
+  enabled: false
   condition: {wind_history_48h: "poyraz"}
   effects: [{applyToSpecies: ["palamut","cinekop"], scoreBonus: 10}]
   messageTR: "Poyraz sonrası göç — palamut/çinekop giriyor!"
@@ -356,14 +367,15 @@ Config: `scoring_config.yaml["waterMassProxy"]`.
   messageTR: "Sarayburnu lodos = palamut patlar!"
   priority: 7
 
-- id: "after_rain_bonus"
+- id: "after_rain_bonus"                  # DISABLED: rain data not yet integrated
+  enabled: false
   condition: {after_rain: true, hours_since_rain: "<=24"}
   effects: [{applyToSpecies: ["levrek"], scoreBonus: 12}, {applyToSpecies: ["karagoz"], scoreBonus: 8}]
   messageTR: "Yağmur sonrası — levrek/karagöz aktif!"
   priority: 6
 
 - id: "full_moon_night_levrek"
-  condition: {moon_illumination: ">90", time: "21:00-03:00"}
+  condition: {moon_illumination: ">90", isDaylight: false}    # v1.4.2: isDaylight replaces time range
   effects: [{applyToSpecies: ["levrek"], scoreBonus: 18, techniqueHints: ["shore_jig","yemli_dip"]}]
   messageTR: "Dolunay gecesi — levrek altın saati!"
   priority: 6
@@ -376,13 +388,13 @@ Config: `scoring_config.yaml["waterMassProxy"]`.
 
 # === TIME + TECHNIQUE (Priority 4-5) ===
 - id: "night_lrf_golden"
-  condition: {time: "20:00-00:00", windSpeedKmh_range: [3,8]}
+  condition: {isDaylight: false, windSpeedKmh_range: [3,8]}    # v1.4.2: isDaylight replaces time range
   effects: [{applyToSpecies: ["istavrit","karagoz","mirmir"], scoreBonus: 0, techniqueHints: ["lrf"]}]
   messageTR: "LRF altın saati!"
   priority: 5
 
 - id: "bebek_night_levrek"
-  condition: {spot: "bebek", time: "20:00-05:00"}
+  condition: {spot: "bebek", isDaylight: false}                 # v1.4.2: isDaylight replaces time range
   effects: [{applyToSpecies: ["levrek"], scoreBonus: 12, techniqueHints: ["shore_jig","lrf","yemli_dip"]}]
   messageTR: "Bebek gece levrek merkezi."
   priority: 5
@@ -399,7 +411,8 @@ Config: `scoring_config.yaml["waterMassProxy"]`.
   messageTR: "WTD surface lure — sabah yüzeyde avlanırlar."
   priority: 4
 
-- id: "strong_current_warning"
+- id: "strong_current_warning"             # DISABLED: current_speed API pending
+  enabled: false
   condition: {current_speed: ">=4"}
   effects: [{applyToSpecies: ["*"], scoreBonus: 0}]
   messageTR: "Akıntı güçlü — sinker artır."
@@ -431,7 +444,7 @@ Config: `scoring_config.yaml["waterMassProxy"]`.
   priority: 5
 
 - id: "night_rocky_karagoz"
-  condition: {time: "20:00-05:00", features_include: "kayalık"}
+  condition: {isDaylight: false, features_include: "kayalık"}   # v1.4.2: isDaylight replaces time range
   effects: [{applyToSpecies: ["karagoz"], scoreBonus: 8, techniqueHints: ["lrf","yemli_dip"], removeFromTechniques: ["spin","capari","shore_jig"]}]
   messageTR: "Gece kayalık — karagöz LRF/yemli dip ile, spin/çapari kaçın."
   priority: 5
@@ -505,7 +518,7 @@ All scoring/rules functions accept configs explicitly — no module-level global
 - Configs validated at startup (species keys must match SpeciesId enum)
 
 ## Ruleset Versioning
-Format: `"YYYYMMDD.N"`. Current: `20260222.2`. Her score/decision doc'ta `meta` içinde. Git revert ile rollback.
+Format: `"YYYYMMDD.N"`. Current: `20260223.1`. Her score/decision doc'ta `meta` içinde. Git revert ile rollback.
 
 ## Trace Guard (v1.3.2)
 

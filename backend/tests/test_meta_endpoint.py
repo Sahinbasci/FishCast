@@ -49,7 +49,7 @@ class TestMetaEndpoint:
         response = client.get("/api/v1/_meta")
         data = response.json()
         assert "rulesetVersion" in data
-        assert data["rulesetVersion"] == "20260222.2"
+        assert data["rulesetVersion"] == "20260223.1"
 
     def test_meta_returns_build_sha(self, client):
         """/_meta returns buildSha from GIT_SHA env (default 'unknown')."""

@@ -5,6 +5,7 @@ Firebase Admin SDK initialization, Firestore client, Auth token verification.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Any, Optional
@@ -88,7 +89,8 @@ async def verify_firebase_token(token: str) -> Optional[dict[str, Any]]:
 
     try:
         from firebase_admin import auth
-        decoded = auth.verify_id_token(token, check_revoked=True)
+        # D2: Run sync verify_id_token in thread pool to avoid blocking event loop
+        decoded = await asyncio.to_thread(auth.verify_id_token, token, check_revoked=True)
         return decoded
     except Exception as e:
         # Categorize error for clear logging

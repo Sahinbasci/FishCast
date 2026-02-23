@@ -41,7 +41,7 @@ class TestTraceLevelGuard:
 
         # Simulate what routers do
         meta: dict[str, str] = {
-            "contractVersion": "1.3",
+            "contractVersion": "1.4.2",
             "generatedAt": "2026-02-22T10:00:00Z",
             "timezone": "Europe/Istanbul",
         }
@@ -59,7 +59,7 @@ class TestTraceLevelGuard:
         applied = _apply_trace_guard(trace_level, allow_full)
 
         meta: dict[str, str] = {
-            "contractVersion": "1.3",
+            "contractVersion": "1.4.2",
             "generatedAt": "2026-02-22T10:00:00Z",
             "timezone": "Europe/Istanbul",
         }

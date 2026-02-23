@@ -1,14 +1,31 @@
+# Version control
+.git/
+.gitignore
+
+# Tests and development
+tests/
+scripts/
+conftest.py
+
+# Python artifacts
 __pycache__/
 *.py[cod]
 *.egg-info/
-.git/
-.gitignore
-.env
-.env.*
-.venv/
-venv/
-tests/
-scripts/
-*.md
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Environment / IDE
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+.vscode/
+.idea/
+
+# Documentation (not needed in runtime image)
+*.md
+docs/

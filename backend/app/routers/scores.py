@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.models.spot import SpotOut
 from app.services.decision import SPECIES_NAME_TR, compute_spot_scores
+from app.services.firebase import get_firestore_db
 from app.services.solunar import compute_solunar
 from app.services.weather import get_weather
 
@@ -31,7 +32,12 @@ async def _get_scores_for_spots(
     offline_mode: bool = False,
 ) -> tuple[dict[str, Any], Any, dict[str, Any]]:
     """Tum mera'lar icin weather + solunar + scores hesaplar."""
-    weather = await get_weather(stormglass_api_key=stormglass_key, offline_mode=offline_mode)
+    db = get_firestore_db()
+    weather = await get_weather(
+        stormglass_api_key=stormglass_key,
+        firestore_db=db,
+        offline_mode=offline_mode,
+    )
     solunar_data = compute_solunar()
     now = datetime.now()
 
@@ -159,7 +165,12 @@ async def score_spot_detail(
     applied_level = trace_level if trace_level != "full" or allow_full else "minimal"
 
     offline_mode = getattr(request.app.state, "offline_mode", False)
-    weather = await get_weather(stormglass_api_key=stormglass_key, offline_mode=offline_mode)
+    db = get_firestore_db()
+    weather = await get_weather(
+        stormglass_api_key=stormglass_key,
+        firestore_db=db,
+        offline_mode=offline_mode,
+    )
     solunar_data = compute_solunar()
     now = datetime.now()
 
@@ -199,7 +210,7 @@ async def score_spot_detail(
         "spotId": spot_id,
         "date": now.strftime("%Y-%m-%d"),
         "meta": {
-            "contractVersion": "1.3",
+            "contractVersion": "1.4.2",
             "generatedAt": now.isoformat(),
             "timezone": "Europe/Istanbul",
         },

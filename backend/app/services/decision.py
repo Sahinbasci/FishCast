@@ -530,7 +530,7 @@ def generate_decision(
 
     decision = {
         "meta": {
-            "contractVersion": "1.3",
+            "contractVersion": "1.4.2",
             "generatedAt": datetime.now(tz=timezone.utc).isoformat(),
             "timezone": "Europe/Istanbul",
         },

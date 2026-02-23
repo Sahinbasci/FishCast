@@ -33,10 +33,17 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest pytest-asyncio
+        run: pip install -r requirements.txt pytest pytest-asyncio pytest-cov ruff mypy
 
-      - name: Run unit tests
-        run: python -m pytest tests/ -v --tb=short
+      - name: Lint with ruff
+        run: ruff check app/ tests/ --output-format=github
+
+      - name: Type check with mypy
+        run: mypy app/ --ignore-missing-imports --no-strict-optional --allow-untyped-defs
+        continue-on-error: true  # advisory until full type coverage
+
+      - name: Run unit tests with coverage
+        run: python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=40
 
       - name: Run smoke test (offline)
         run: python scripts/smoke_decision.py

@@ -1,6 +1,6 @@
 # TASKS.md — FishCast 3-Week MVP Plan
 
-> Contract Version: 1.2 | 2026-02-19
+> Contract Version: 1.4.2 | 2026-02-23
 
 ---
 
@@ -9,28 +9,28 @@
 **Goal:** 16 mera haritada, statik detay sayfaları, Zod/Pydantic aligned.
 
 ### Backend
-- [ ] FastAPI scaffold (main.py, routers/, models/, data/)
-- [ ] GET /health endpoint
-- [ ] GET /spots (spots.json — 16 mera, regionId, windExposure, accuracy)
-- [ ] GET /species (species.json — 9 tür)
-- [ ] GET /techniques (statik)
-- [ ] Pydantic models aligned with API_CONTRACTS.md canonical types
-- [ ] models/enums.py: tüm enum'lar (RegionId, SpeciesMode, DataQuality)
-- [ ] Firebase project setup
-- [ ] Cloud Run deploy (basic)
+- [x] FastAPI scaffold (main.py, routers/, models/, data/)
+- [x] GET /health endpoint
+- [x] GET /spots (spots.json — 16 mera, regionId, windExposure, accuracy)
+- [x] GET /species (species.json — 9 tür)
+- [x] GET /techniques (statik)
+- [x] Pydantic models aligned with API_CONTRACTS.md canonical types
+- [x] models/enums.py: tüm enum'lar (RegionId, SpeciesMode, DataQuality)
+- [x] Firebase project setup
+- [x] Cloud Run deploy (basic)
 
 ### Frontend
-- [ ] Next.js 14 scaffold
-- [ ] lib/schemas.ts: Zod schemas (DecisionResponse + SpeciesScore + all enums)
-- [ ] lib/api.ts: typed fetch wrappers
-- [ ] Leaflet harita: 16 pin (region renk kodlu: avrupa=mavi, anadolu=kırmızı, city_belt=turuncu)
-- [ ] Spot detay sayfası /spot/[id]
-- [ ] Mobile responsive + Vercel deploy
+- [x] Next.js 14 scaffold
+- [x] lib/schemas.ts: Zod schemas (DecisionResponse + SpeciesScore + all enums)
+- [x] lib/api.ts: typed fetch wrappers
+- [x] Leaflet harita: 16 pin (region renk kodlu: avrupa=mavi, anadolu=kırmızı, city_belt=turuncu)
+- [x] Spot detay sayfası /spot/[id]
+- [x] Mobile responsive + Vercel deploy
 
 ### Acceptance
-- [ ] GET /spots 16 mera döner, regionId + accuracy field'ları var
-- [ ] Harita 16 pin, regionId renkleri doğru
-- [ ] Lighthouse mobile > 80
+- [x] GET /spots 16 mera döner, regionId + accuracy field'ları var
+- [x] Harita 16 pin, regionId renkleri doğru
+- [x] Lighthouse mobile > 80
 
 ---
 
@@ -39,83 +39,87 @@
 **Goal:** Gerçek skorlar + mode derivation + bestWindows.
 
 ### Backend
-- [ ] Open-Meteo entegrasyonu (windSpeedKmh, pressureHpa, airTempC, etc.)
-- [ ] Stormglass entegrasyonu (seaTempC, waveHeightM) + cache + fallback
-- [ ] dataQuality derivation: "live" / "cached" / "fallback" based on source status
-- [ ] Solunar (ephem) → majorPeriods[], minorPeriods[], solunarRating
-- [ ] 5 parametre fonksiyonu (pressure, wind, seaTemp, solunar, time)
-- [ ] Mode derivation (SCORING_ENGINE.md § Mode Derivation)
-- [ ] bestWindows computation (solunar major/minor + conditions → 2-4 windows)
-- [ ] Score doc writer → Firestore (speciesScores MAP with mode field)
-- [ ] Cron: POST /internal/calculate-scores (3h)
-- [ ] GET /scores/today + GET /scores/spot/{spotId} (MAP→ARRAY transform)
-- [ ] Confidence computation (dataQuality + reports + season)
-- [ ] Rule bonus cap enforcement (max +30)
+- [x] Open-Meteo entegrasyonu (windSpeedKmh, pressureHpa, airTempC, etc.)
+- [x] Stormglass entegrasyonu (seaTempC, waveHeightM) + cache + fallback
+- [x] dataQuality derivation: "live" / "cached" / "fallback" based on source status
+- [x] Solunar (ephem) → majorPeriods[], minorPeriods[], solunarRating
+- [x] 5 parametre fonksiyonu (pressure, wind, seaTemp, solunar, time)
+- [x] Mode derivation (SCORING_ENGINE.md § Mode Derivation)
+- [x] bestWindows computation (solunar major/minor + conditions → 2-4 windows)
+- [x] Score doc writer → Firestore (speciesScores MAP with mode field)
+- [x] Cron: POST /internal/calculate-scores (3h)
+- [x] GET /scores/today + GET /scores/spot/{spotId} (MAP→ARRAY transform)
+- [x] Confidence computation (dataQuality + reports + season)
+- [x] Rule bonus cap enforcement (per-category + totalCap=25)
 
 ### Frontend
-- [ ] Skor kartı (0-100 gauge, renk)
-- [ ] Harita pinleri skor renginde
-- [ ] Spot: hava + solunar + tür skorları + mode badge
-- [ ] bestWindows zaman çizelgesi
+- [x] Skor kartı (0-100 gauge, renk)
+- [x] Harita pinleri skor renginde
+- [x] Spot: hava + solunar + tür skorları + mode badge
+- [x] bestWindows zaman çizelgesi
 
 ### Acceptance
-- [ ] 16 spot × 5 tür skorlanır
-- [ ] Her tür mode field içerir (chasing/selective/holding)
-- [ ] bestWindows hesaplanır (2-4 window)
-- [ ] Stormglass kapat → dataQuality="fallback", skorlar üretilir
-- [ ] No species rule bonus exceeds +30
+- [x] 16 spot × 6 tür skorlanır (mirmir Tier 1 dahil)
+- [x] Her tür mode field içerir (chasing/selective/holding)
+- [x] bestWindows hesaplanır (2-4 window)
+- [x] Stormglass kapat → dataQuality="fallback", skorlar üretilir
+- [x] Per-category caps + totalCap=25 enforced
 
 ---
 
 ## Week 3: Rule Engine + Decision Output + Reports + Deploy
 
-**Goal:** Decision Output v1, 24 kural, topluluk raporları, production.
+**Goal:** Decision Output v1, 31 kural (28 aktif + 3 disabled), topluluk raporları, production.
 
 ### Backend — Rule Engine
-- [ ] rules.yaml: 24 kural (modeHint, regionId, pelagicCorridor conditions)
-- [ ] rules_schema.json + startup validation (invalid = crash)
-- [ ] Conflict resolution: bonus STACK+CAP, techniques MERGE, modeHint priority-wins
-- [ ] removeFromTechniques + avoidTechniques logic
-- [ ] NO-GO single authority: nogo_extreme_wind rule only
-- [ ] rulesetVersion tracking
+- [x] rules.yaml: 31 kural (28 active + 3 disabled pending data sources)
+- [x] rules_schema.json + startup validation (invalid = crash)
+- [x] Conflict resolution: bonus STACK+CAP, techniques MERGE, modeHint priority-wins
+- [x] removeFromTechniques + avoidTechniques logic
+- [x] NO-GO single authority: nogo_extreme_wind rule only
+- [x] rulesetVersion tracking (20260223.1)
+- [x] Disabled rule mechanism: enabled/disableReason fields (v1.4.2)
+- [x] isDaylight conditions for night rules (v1.4.2)
+- [x] waterMassStrength graded scaling (v1.4.2)
 
 ### Backend — Decision Output v1
-- [ ] GET /decision/today endpoint (full DecisionResponse schema)
-- [ ] Decision service: per-region best spot selection
-- [ ] reportSignals24h aggregation
-- [ ] whyTR generation from rule messageTR + conditions
-- [ ] avoidTechniques from mode + removeFromTechniques
-- [ ] Decision doc → Firestore decisions/{date}
+- [x] GET /decision/today endpoint (full DecisionResponse schema)
+- [x] Decision service: per-region best spot selection
+- [x] reportSignals24h aggregation
+- [x] whyTR generation from rule messageTR + conditions
+- [x] avoidTechniques from mode + removeFromTechniques
+- [x] Decision doc → Firestore decisions/{date}
 
 ### Backend — Reports
-- [ ] POST /reports (photoUrl, no base64)
-- [ ] GET /reports/spot/{spotId} (24h public, all auth)
-- [ ] Firebase Auth middleware
-- [ ] reportSignals24h update on new report
+- [x] POST /reports (photoUrl, no base64)
+- [x] GET /reports/spot/{spotId} (24h public aggregate, auth own reports)
+- [x] Firebase Auth middleware (async verify_id_token v1.4.2)
+- [x] reportSignals24h update on new report
 
 ### Frontend — Decision UI
-- [ ] /decision page: Daily Decision ana blok
+- [x] /decision page: Daily Decision ana blok
   - daySummary card (rüzgar, basınç trend, sıcaklık, dataQuality badge)
   - bestWindows zaman çizelgesi (horizontal)
   - 3 region kartı: mera + türler + teknikler + whyTR + avoidTechniques
-  - Mode göstergesi per tür (🟢/🟡/🔴)
-  - noGo full-screen overlay (isNoGo=true)
-- [ ] Rapor formu + rapor kartları
-- [ ] Auth: Google sign-in
-- [ ] Error states + loading skeletons
+  - Mode göstergesi per tür
+  - noGo full-screen overlay (isNoGo=true) + sheltered alternatives (v1.4.2)
+- [x] Rapor formu + rapor kartları
+- [x] Auth: Google sign-in
+- [x] Error states + loading skeletons
+- [x] RegionCard reportSignals24h display (v1.4.2)
 
 ### Deploy & Beta
-- [ ] Production: Vercel + Cloud Run + Cloud Scheduler (3h)
+- [x] Production: Vercel + Cloud Run + Cloud Scheduler (3h)
 - [ ] 3 deneyimli balıkçı beta
 - [ ] Golden test fixtures pass
 - [ ] Feedback → rulesetVersion iteration
 
 ### Acceptance
-- [ ] GET /decision/today doğru DecisionResponse schema döner
-- [ ] 3 region'da recommendedSpot var
-- [ ] Mode koşula göre değişir
-- [ ] avoidTechniques selective modda spin içerir
-- [ ] 24 kural unit test geçer
+- [x] GET /decision/today doğru DecisionResponse schema döner
+- [x] 3 region'da recommendedSpot var
+- [x] Mode koşula göre değişir
+- [x] avoidTechniques selective modda spin içerir
+- [x] 31 kural (28 active) unit test geçer
 - [ ] Golden fixtures 3 gün pass
 - [ ] Beta balıkçılar uçtan uca kullanabilir
 

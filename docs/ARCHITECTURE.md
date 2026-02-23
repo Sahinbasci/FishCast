@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — FishCast Teknik Mimari
 
-> Contract Version: 1.3 | 2026-02-22
+> Contract Version: 1.4.2 | 2026-02-23
 
 ## Sistem Diagramı
 ```
@@ -23,7 +23,7 @@
 2. Hava + solunar verileri topla, normalize et (units table)
 3. Her mera için: tür skorları + mode derivation
 4. Region arası en iyi mera seçimi → decision doc
-5. Firestore: `scores/{date}/{spotId}` + `decisions/{date}`
+5. Firestore: `scores/{date}/spots/{spotId}` + `decisions/{date}`
 
 ### Av Raporu
 1. Client → Firebase Storage direct upload → photoUrl
@@ -226,7 +226,7 @@ At startup, `main.py` lifespan loads:
 - Validation: all species keys must exist in `SpeciesId` enum, else fail-fast
 
 ### Collection: `scores`
-Path: `scores/{YYYY-MM-DD}/{spotId}`
+Path: `scores/{YYYY-MM-DD}/spots/{spotId}` (subcollection)
 
 ```json
 {

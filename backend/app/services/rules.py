@@ -327,6 +327,10 @@ def evaluate_rules(
     sorted_rules = sorted(rules, key=lambda r: r.get("priority", 1), reverse=True)
 
     for rule in sorted_rules:
+        # B1: Skip disabled rules (default: enabled=True)
+        if not rule.get("enabled", True):
+            continue
+
         condition = rule.get("condition", {})
         effects = rule.get("effects", [])
         priority = rule.get("priority", 1)
@@ -339,9 +343,18 @@ def evaluate_rules(
         result.fired_rules_count += 1
         rule_affected_species: list[str] = []
 
+        # B3: Apply waterMassStrength graded scaling for water mass rules
+        # If a rule has waterMassProxy condition and waterMassStrength is in context,
+        # scale the bonus proportionally (0.0-1.0) instead of binary full effect.
+        rule_id = rule.get("id", "")
+        is_water_mass_rule = "waterMassProxy" in condition
+        wm_strength = context.get("waterMassStrength", 1.0) if is_water_mass_rule else 1.0
+
         for effect in effects:
             apply_to = effect.get("applyToSpecies", ["*"])
-            score_bonus = effect.get("scoreBonus", 0)
+            raw_bonus = effect.get("scoreBonus", 0)
+            # Scale bonus by water mass strength (graded, not binary)
+            score_bonus = round(raw_bonus * wm_strength) if is_water_mass_rule else raw_bonus
             technique_hints = effect.get("techniqueHints", [])
             remove_techniques = effect.get("removeFromTechniques", [])
             mode_hint = effect.get("modeHint")

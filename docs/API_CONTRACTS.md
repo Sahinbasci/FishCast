@@ -1,6 +1,6 @@
 # API_CONTRACTS.md — FishCast API
 
-> Contract Version: 1.4.1 | 2026-02-22
+> Contract Version: 1.4.2 | 2026-02-23
 
 ## Base
 - Dev: `http://localhost:8000/api/v1`
@@ -26,7 +26,7 @@ Bu kural burada TEK YERDE tanımlıdır. Diğer dosyalar buraya referans verir.
 
 ### 1. GET `/health` — Public
 ```json
-{"status":"ok","engineVersion":"1.0.0","rulesetVersion":"20260222.2","rulesCount":31}
+{"status":"ok","engineVersion":"1.0.0","rulesetVersion":"20260223.1","rulesCount":31}
 ```
 
 ### 2. GET `/decision/today` — Public (DECISION OUTPUT v1)
@@ -288,7 +288,7 @@ Returns the authenticated user's own catch reports, newest first.
 ### 9. GET `/species` — Public
 ### 10. GET `/techniques` — Public
 
-### 11. GET `/_meta` — Public (v1.4.1)
+### 11. GET `/_meta` — Public (v1.4.2 enhanced)
 
 Deploy guard endpoint. Returns runtime configuration for CI/CD verification.
 
@@ -296,13 +296,27 @@ Deploy guard endpoint. Returns runtime configuration for CI/CD verification.
 {
   "offlineMode": false,
   "allowTraceFull": false,
-  "rulesetVersion": "20260222.2",
+  "rulesetVersion": "20260223.1",
   "rulesCount": 31,
+  "activeRulesCount": 28,
+  "disabledRulesCount": 3,
+  "disabledRuleIds": ["post_poyraz_migration", "after_rain_bonus", "strong_current_warning"],
+  "dataSourceAvailability": {
+    "wind_history_48h": false,
+    "rain_data": false,
+    "current_speed": false
+  },
   "buildSha": "abc123def456"
 }
 ```
 
 Deploy workflow asserts `offlineMode==false` and `allowTraceFull==false` after every production deploy.
+
+**New fields (v1.4.2):**
+- `activeRulesCount`: Number of enabled rules
+- `disabledRulesCount`: Number of disabled rules (pending data sources)
+- `disabledRuleIds`: List of disabled rule IDs for monitoring
+- `dataSourceAvailability`: Status of pending data sources
 
 ---
 

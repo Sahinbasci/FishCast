@@ -1,10 +1,26 @@
 # INSTRUCTIONS.md — FishCast Project
 
-> Contract Version: 1.4.1 | 2026-02-22
+> Contract Version: 1.4.2 | 2026-02-23
 
 ## Proje
 **FishCast** — Istanbul kıyı balıkçıları için veri temelli av karar destek sistemi.
 MVP: 3 hafta. Kural motoru balıkçı feedback'iyle agresif iterate edilecek.
+
+## Changelog v1.4.2 (2026-02-23)
+- **Pressure timezone fix**: `_compute_pressure_change_3h()` now uses Istanbul local hour (not UTC) for hourly array indexing.
+- **Firestore DB passthrough**: All routers pass `firestore_db` to `get_weather()` for cache fallback.
+- **offFloor enforcement**: Off-season species scores never fall below configured floor (default 10).
+- **mirmir tier fix**: Promoted to Tier 1 in `species.json` (was incorrectly Tier 2).
+- **Disabled rule mechanism**: `enabled: false` + `disableReason` fields in rules.yaml. 3 rules disabled (pending data sources).
+- **isDaylight conditions**: 4 night rules now use `isDaylight: false` instead of hardcoded time ranges.
+- **waterMassStrength graded**: Water mass proxy rules scale bonus by wind strength (0.0–1.0).
+- **Internal endpoint auth**: `X-Internal-Secret` header verification for `/internal/calculate-scores`.
+- **/_meta enhanced**: activeRulesCount, disabledRulesCount, disabledRuleIds, dataSourceAvailability fields.
+- **Async Firebase Auth**: `verify_id_token` runs in thread pool via `asyncio.to_thread()`.
+- **Dockerfile hardening**: Non-root user (appuser), enhanced .dockerignore.
+- **NoGoOverlay sheltered alternatives**: Shows sheltered spots with allowed techniques during NO-GO.
+- **RegionCard reportSignals24h**: Displays community report signals in region cards.
+- **Ruleset**: 20260223.1
 
 ## Changelog v1.4.1 (2026-02-22)
 - **Firestore rules hardened**: Field allowlist (hasOnly), string size guards, max fields per doc, timestamp as native Firestore Timestamp type, immutable fields on update.
@@ -213,6 +229,6 @@ CARDINAL_TO_TR = {
 
 ## Referanslar
 - `docs/ARCHITECTURE.md` — Firestore şeması, spot metadata, data source policy
-- `docs/SCORING_ENGINE.md` — Ağırlıklar, 31 kural, mode derivation, NO-GO authority, category caps
+- `docs/SCORING_ENGINE.md` — Ağırlıklar, 31 kural (28 aktif + 3 disabled), mode derivation, NO-GO authority, category caps
 - `docs/API_CONTRACTS.md` — Decision Output v1, canonical types, MAP→ARRAY transform
 - `docs/TASKS.md` — 3 haftalık MVP + golden fixtures

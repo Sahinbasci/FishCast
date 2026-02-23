@@ -17,6 +17,7 @@ import time
 from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -138,6 +139,44 @@ def derive_pressure_trend(change_3h_hpa: float) -> PressureTrend:
     return PressureTrend.stable
 
 
+ISTANBUL_TZ = ZoneInfo("Europe/Istanbul")
+
+
+def _compute_pressure_change_3h(
+    pressure_hourly: list[float | None],
+    now: datetime | None = None,
+) -> float:
+    """Compute 3-hour pressure change from Istanbul-local-indexed hourly data.
+
+    Open-Meteo returns hourly arrays indexed by the timezone requested
+    (Europe/Istanbul). We MUST use Istanbul local hour for correct indexing.
+
+    Args:
+        pressure_hourly: Hourly pressure values indexed 0-23 by Istanbul local time.
+        now: Current datetime (for testing). Defaults to now in Istanbul TZ.
+
+    Returns:
+        Pressure change over last 3 hours (hPa). 0.0 if data insufficient.
+    """
+    if len(pressure_hourly) < 4:
+        return 0.0
+
+    if now is None:
+        now = datetime.now(tz=ISTANBUL_TZ)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc).astimezone(ISTANBUL_TZ)
+    else:
+        now = now.astimezone(ISTANBUL_TZ)
+
+    istanbul_hour = now.hour
+    now_idx = min(istanbul_hour, len(pressure_hourly) - 1)
+    past_idx = max(0, now_idx - 3)
+
+    if pressure_hourly[now_idx] is not None and pressure_hourly[past_idx] is not None:
+        return pressure_hourly[now_idx] - pressure_hourly[past_idx]
+    return 0.0
+
+
 # --- Weather Data Model ---
 
 class WeatherData:
@@ -229,16 +268,11 @@ async def fetch_open_meteo(
         cloud_cover_pct = current.get("cloud_cover", 50)
 
         # pressureChange3hHpa: son 3 saatlik fark
-        pressure_change_3h_hpa = 0.0
-        pressure_hourly = hourly.get("surface_pressure", [])
-        if len(pressure_hourly) >= 4:
-            now_idx = min(
-                datetime.now(tz=timezone.utc).hour,
-                len(pressure_hourly) - 1,
-            )
-            past_idx = max(0, now_idx - 3)
-            if pressure_hourly[now_idx] is not None and pressure_hourly[past_idx] is not None:
-                pressure_change_3h_hpa = pressure_hourly[now_idx] - pressure_hourly[past_idx]
+        # Open-Meteo returns hourly data indexed by Istanbul local time
+        # (timezone param = "Europe/Istanbul"), so we must use Istanbul hour.
+        pressure_change_3h_hpa = _compute_pressure_change_3h(
+            hourly.get("surface_pressure", [])
+        )
 
         return {
             "windSpeedKmh": wind_speed_kmh,

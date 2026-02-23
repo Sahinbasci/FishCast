@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "FishCast Rules",
-  "description": "Validation schema for rules.yaml — 24 fishing rules",
+  "description": "Validation schema for rules.yaml — FishCast rule engine",
   "type": "array",
   "minItems": 1,
   "items": {
@@ -65,6 +65,15 @@
         "type": "string",
         "enum": ["absolute", "windCoast", "weatherMode", "istanbul", "techniqueTime"],
         "description": "Rule bonus cap category. Optional — inferred from priority if omitted."
+      },
+      "enabled": {
+        "type": "boolean",
+        "description": "If false, rule is skipped during evaluation. Default: true.",
+        "default": true
+      },
+      "disableReason": {
+        "type": "string",
+        "description": "Human-readable reason why rule is disabled (e.g., 'data source unavailable')."
       }
     },
     "additionalProperties": false

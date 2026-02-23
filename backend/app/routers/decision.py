@@ -12,6 +12,7 @@ from fastapi import APIRouter, Query, Request
 
 from app.models.spot import SpotOut
 from app.services.decision import generate_decision
+from app.services.firebase import get_firestore_db
 from app.services.solunar import compute_solunar
 from app.services.weather import get_weather
 
@@ -45,7 +46,12 @@ async def decision_today(
 
     # Fetch weather and solunar
     offline_mode = getattr(request.app.state, "offline_mode", False)
-    weather = await get_weather(stormglass_api_key=stormglass_key, offline_mode=offline_mode)
+    db = get_firestore_db()
+    weather = await get_weather(
+        stormglass_api_key=stormglass_key,
+        firestore_db=db,
+        offline_mode=offline_mode,
+    )
     solunar_data = compute_solunar()
 
     # v1.3: Pass configs for DI

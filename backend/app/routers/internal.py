@@ -10,9 +10,9 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 
 from app.models.spot import SpotOut
 from app.services.decision import compute_spot_scores, generate_decision
@@ -24,13 +24,32 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# --- Internal auth helper ---
+_INTERNAL_SECRET = os.getenv("INTERNAL_SECRET", "")
+
+
+def _verify_internal_auth(x_internal_secret: Optional[str]) -> None:
+    """Verify shared secret for internal endpoints.
+
+    If INTERNAL_SECRET env is set, requests MUST provide matching header.
+    If INTERNAL_SECRET is empty (local dev), auth is skipped with a warning.
+    """
+    if not _INTERNAL_SECRET:
+        logger.warning("INTERNAL_SECRET not set — internal endpoints unprotected (dev mode)")
+        return
+    if x_internal_secret != _INTERNAL_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid or missing X-Internal-Secret")
+
 
 @router.post(
     "/internal/calculate-scores",
     summary="Skor hesaplama cron trigger",
     description="Tüm 16 mera için skorları hesaplar ve Firestore'a yazar. Cloud Scheduler 3h'te bir çağırır.",
 )
-async def calculate_scores(request: Request) -> dict[str, Any]:
+async def calculate_scores(
+    request: Request,
+    x_internal_secret: Optional[str] = Header(None, alias="X-Internal-Secret"),
+) -> dict[str, Any]:
     """Tüm meraların skorlarını hesaplar ve Firestore'a yazar.
 
     1. Weather + Solunar verisi topla
@@ -41,6 +60,8 @@ async def calculate_scores(request: Request) -> dict[str, Any]:
     Returns:
         Hesaplama sonuç özeti.
     """
+    _verify_internal_auth(x_internal_secret)
+
     spots: list[SpotOut] = request.app.state.spots
     rules = getattr(request.app.state, "rules", [])
     stormglass_key = getattr(request.app.state, "stormglass_api_key", None)
@@ -50,8 +71,9 @@ async def calculate_scores(request: Request) -> dict[str, Any]:
 
     logger.info("Skor hesaplama başladı: %s — %d mera", date_str, len(spots))
 
-    # Fetch weather and solunar
-    weather = await get_weather(stormglass_api_key=stormglass_key)
+    # Fetch weather and solunar (pass Firestore db for Stormglass cache fallback)
+    db = get_firestore_db()
+    weather = await get_weather(stormglass_api_key=stormglass_key, firestore_db=db)
     solunar_data = compute_solunar()
 
     # v1.3: Pass configs for DI
@@ -85,7 +107,7 @@ async def calculate_scores(request: Request) -> dict[str, Any]:
                     "spotId": spot.id,
                     "date": date_str,
                     "meta": {
-                        "contractVersion": "1.3",
+                        "contractVersion": "1.4.2",
                         "generatedAt": now.isoformat(),
                         "timezone": "Europe/Istanbul",
                     },
@@ -139,10 +161,22 @@ async def get_meta(request: Request) -> dict[str, Any]:
     Used by deploy.yml to assert production safety invariants.
     """
     rules = getattr(request.app.state, "rules", [])
+    active_rules = [r for r in rules if r.get("enabled", True)]
+    disabled_rules = [r for r in rules if not r.get("enabled", True)]
     return {
         "offlineMode": getattr(request.app.state, "offline_mode", False),
         "allowTraceFull": getattr(request.app.state, "allow_trace_full", False),
-        "rulesetVersion": "20260222.2",
+        "rulesetVersion": "20260223.1",
         "rulesCount": len(rules),
+        "activeRulesCount": len(active_rules),
+        "disabledRulesCount": len(disabled_rules),
+        "disabledRuleIds": [r["id"] for r in disabled_rules],
         "buildSha": os.getenv("GIT_SHA", "unknown"),
+        "dataSourceAvailability": {
+            "openMeteo": True,
+            "stormglass": bool(getattr(request.app.state, "stormglass_api_key", None)),
+            "rainData": False,
+            "currentSpeed": False,
+            "windHistory48h": False,
+        },
     }

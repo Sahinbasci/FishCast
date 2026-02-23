@@ -1,6 +1,7 @@
-# FishCast Rule Engine — 33 Rules
+# FishCast Rule Engine — 31 Rules (28 active + 3 disabled)
 # Source: SCORING_ENGINE.md § Rules + v1.3 hardening additions
-# Format: YYYYMMDD.N — rulesetVersion: 20260222.1
+# Format: YYYYMMDD.N — rulesetVersion: 20260223.1
+# Disabled rules: data source not yet available (enabled: false)
 
 # === ABSOLUTE (Priority 10) ===
 - id: "nogo_extreme_wind"
@@ -113,6 +114,8 @@
   category: "weatherMode"
 
 - id: "post_poyraz_migration"
+  enabled: false
+  disableReason: "wind_history_48h data source not yet implemented"
   condition:
     wind_history_48h: "poyraz"
   effects:
@@ -137,6 +140,8 @@
 
 # === ISTANBUL-SPECIFIC (Priority 5-6) ===
 - id: "after_rain_bonus"
+  enabled: false
+  disableReason: "Rain data (after_rain, hours_since_rain) not yet integrated from Open-Meteo"
   condition:
     after_rain: true
     hours_since_rain: "<=24"
@@ -152,7 +157,7 @@
 - id: "full_moon_night_levrek"
   condition:
     moon_illumination: ">90"
-    time: "21:00-03:00"
+    isDaylight: false
   effects:
     - applyToSpecies: ["levrek"]
       scoreBonus: 18
@@ -201,7 +206,7 @@
 # === TIME + TECHNIQUE (Priority 4-5) ===
 - id: "night_lrf_golden"
   condition:
-    time: "20:00-00:00"
+    isDaylight: false
     windSpeedKmh_range: [3, 8]
   effects:
     - applyToSpecies: ["istavrit", "karagoz", "mirmir"]
@@ -214,7 +219,7 @@
 - id: "bebek_night_levrek"
   condition:
     spot: "bebek"
-    time: "20:00-05:00"
+    isDaylight: false
   effects:
     - applyToSpecies: ["levrek"]
       scoreBonus: 12
@@ -260,7 +265,7 @@
 
 - id: "night_rocky_karagoz"
   condition:
-    time: "20:00-05:00"
+    isDaylight: false
     features_include: "kayalık"
   effects:
     - applyToSpecies: ["karagoz"]
@@ -283,6 +288,8 @@
   category: "techniqueTime"
 
 - id: "strong_current_warning"
+  enabled: false
+  disableReason: "Bosphorus current_speed data source not available (SHOD API pending)"
   condition:
     current_speed: ">=4"
   effects:
