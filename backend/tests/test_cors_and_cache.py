@@ -6,10 +6,7 @@ D) Validates weather cache is bounded, LRU, and handles eviction.
 
 from __future__ import annotations
 
-import asyncio
-import os
-import time
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient

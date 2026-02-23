@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
     # Only run from the main repo, never from forks
-    if: github.repository_owner == 'sahin'
+    if: github.repository_owner == 'Sahinbasci'
 
     steps:
       - uses: actions/checkout@v4

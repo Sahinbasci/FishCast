@@ -346,7 +346,6 @@ def evaluate_rules(
         # B3: Apply waterMassStrength graded scaling for water mass rules
         # If a rule has waterMassProxy condition and waterMassStrength is in context,
         # scale the bonus proportionally (0.0-1.0) instead of binary full effect.
-        rule_id = rule.get("id", "")
         is_water_mass_rule = "waterMassProxy" in condition
         wm_strength = context.get("waterMassStrength", 1.0) if is_water_mass_rule else 1.0
 

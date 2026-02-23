@@ -5,7 +5,6 @@ Rules without an `enabled` field default to active (enabled: true).
 """
 
 import pytest
-from unittest.mock import MagicMock
 
 from app.services.rules import evaluate_rules, load_and_validate_rules, TIER1_SPECIES
 

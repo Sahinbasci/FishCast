@@ -10,7 +10,6 @@
     Default: chasing
 """
 
-import pytest
 from unittest.mock import MagicMock
 
 from app.services.mode import derive_mode

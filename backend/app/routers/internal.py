@@ -54,7 +54,7 @@ async def calculate_scores(
 
     1. Weather + Solunar verisi topla
     2. Her mera için: tür skorları + mode derivation
-    3. Firestore: scores/{date}/{spotId}
+    3. Firestore: scores/{date}/spots/{spotId}
     4. Decision doc: decisions/{date}
 
     Returns:
@@ -99,7 +99,7 @@ async def calculate_scores(
 
     if db:
         try:
-            # Write score documents: scores/{date}/{spotId}
+            # Write score documents: scores/{date}/spots/{spotId}
             for spot in spots:
                 result = spot_results[spot.id]
                 doc_ref = db.collection("scores").document(date_str).collection("spots").document(spot.id)

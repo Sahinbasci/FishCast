@@ -4,7 +4,6 @@ Off-season species must never score below their configured offFloor value,
 even with terrible conditions. Peak and shoulder seasons are not affected.
 """
 
-import pytest
 from unittest.mock import MagicMock
 
 from app.models.enums import DataQuality

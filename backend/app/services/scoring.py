@@ -244,7 +244,6 @@ def compute_season_adjustment(
 
     if month in off_months:
         off_adj = sp_cfg.get("offAdjustment", -20)
-        off_floor = sp_cfg.get("offFloor", 10)
         conf_impact = sp_cfg.get("confidenceImpact", 0.2)
         is_parca = False
 

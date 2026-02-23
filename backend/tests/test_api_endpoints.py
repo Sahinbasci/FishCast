@@ -5,7 +5,7 @@ Mocks Firebase and weather for offline/isolated testing.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 

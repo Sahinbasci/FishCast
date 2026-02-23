@@ -7,7 +7,6 @@
 """
 
 from datetime import datetime
-from unittest.mock import MagicMock
 
 from app.models.enums import DataQuality
 from app.services.scoring import calculate_species_score

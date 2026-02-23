@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from app.models.enums import DataQuality, PressureTrend, WindCardinal
+from app.models.enums import DataQuality, PressureTrend
 from app.utils.wind import degrees_to_cardinal_8
 
 logger = logging.getLogger(__name__)

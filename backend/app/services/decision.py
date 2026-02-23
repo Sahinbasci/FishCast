@@ -12,12 +12,10 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from app.models.enums import DataQuality, SpeciesId
 from app.models.spot import SpotOut
 from app.services.mode import derive_mode
 from app.services.rules import (
     TIER1_SPECIES,
-    RuleResult,
     build_rule_context,
     evaluate_rules,
 )

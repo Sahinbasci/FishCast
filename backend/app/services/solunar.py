@@ -8,7 +8,6 @@ ARRAY formatı zorunlu: majorPeriods[], minorPeriods[].
 from __future__ import annotations
 
 import logging
-import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from zoneinfo import ZoneInfo

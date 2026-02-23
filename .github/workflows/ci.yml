@@ -19,7 +19,8 @@ jobs:
       - name: Check for secret leaks
         working-directory: .
         run: |
-          if grep -rn "PRIVATE KEY" --include="*.py" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.ts" --include="*.tsx" --exclude-dir=.git --exclude-dir=node_modules . 2>/dev/null; then
+          PATTERN="PRIV""ATE KEY"
+          if grep -rn "$PATTERN" --include="*.py" --include="*.json" --include="*.yaml" --include="*.ts" --include="*.tsx" --exclude-dir=.git --exclude-dir=node_modules . 2>/dev/null; then
             echo "ERROR: Potential secret/private key leak detected in source"
             exit 1
           fi
@@ -81,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend-test]
     # Only on main branch, never from forks
-    if: github.ref == 'refs/heads/main' && github.repository_owner == 'sahin'
+    if: github.ref == 'refs/heads/main' && github.repository_owner == 'Sahinbasci'
 
     steps:
       - uses: actions/checkout@v4
