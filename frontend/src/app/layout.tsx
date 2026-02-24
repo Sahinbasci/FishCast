@@ -20,18 +20,17 @@ export default function RootLayout({
     <html lang="tr">
       <body className={`${inter.className} antialiased`}>
         <AuthProvider>
-          {/* Fixed scenic background — Istanbul Bosphorus */}
+          {/* Fixed scenic background — Istanbul Bosphorus fishing */}
           <div className="fixed inset-0 z-0">
             <div
-              className="absolute inset-0 bg-cover bg-center"
+              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
               style={{
                 backgroundImage:
-                  "url('https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=1920&q=80')",
-                backgroundAttachment: "fixed",
+                  "url('/bg-fishing.jpg'), url('https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=1920&q=80')",
                 backgroundColor: "#060c1f",
               }}
             />
-            <div className="absolute inset-0 bg-slate-900/65" />
+            <div className="absolute inset-0 bg-gradient-to-b from-slate-900/70 via-slate-900/60 to-slate-900/80" />
           </div>
 
           <div className="relative z-10 min-h-screen">
